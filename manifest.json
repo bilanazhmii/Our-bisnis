@@ -1,0 +1,14 @@
+{
+  "name": "Data Penjualan Kopi Tutug",
+  "short_name": "Penjualan",
+  "description": "Aplikasi pencatatan penjualan dan stok",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f3f5f7",
+  "theme_color": "#7a4b24",
+  "orientation": "portrait-primary",
+  "icons": [
+    {"src":"icon.png","sizes":"512x512","type":"image/png","purpose":"any"},
+    {"src":"icon.png","sizes":"512x512","type":"image/png","purpose":"maskable"}
+  ]
+}
