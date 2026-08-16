@@ -2,19 +2,20 @@ const $=id=>document.getElementById(id);
 const KEY="kopiTutugDataV2";
 const today=()=>new Date().toISOString().slice(0,10);
 const rupiah=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(Number(n)||0);
+const uniqueId=()=>crypto.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`;
 let db=JSON.parse(localStorage.getItem(KEY)||"null");
 if(!db){
   const oldSales=JSON.parse(localStorage.getItem("dataPenjualan")||"[]");
   const products=[];
   oldSales.forEach(s=>{
     if(!products.some(p=>p.name===s.barang)){
-      products.push({id:crypto.randomUUID(),name:s.barang,cost:0,price:Number(s.harga)||0,stock:0});
+      products.push({id:uniqueId(),name:s.barang,cost:0,price:Number(s.harga)||0,stock:0});
     }
   });
   db={pin:"1234",products,sales:oldSales.map(s=>{
     const p=products.find(p=>p.name===s.barang);
     const price=Number(s.harga)||0,qty=Number(s.jumlah)||0;
-    return {id:crypto.randomUUID(),date:s.tanggal,productId:p?.id,product:s.barang,price,qty,cost:0,total:Number(s.total)||price*qty,profit:price*qty};
+    return {id:uniqueId(),date:s.tanggal,productId:p?.id,product:s.barang,price,qty,cost:0,total:Number(s.total)||price*qty,profit:price*qty};
   })};
   localStorage.setItem(KEY,JSON.stringify(db));
 }
@@ -43,7 +44,7 @@ function renderAll(){renderProducts();fillProductSelect();renderSales();renderDa
 function addProduct(){
  const name=$("pName").value.trim(),cost=+$("pCost").value||0,price=+$("pPrice").value||0,stock=+$("pStock").value||0;
  if(!name)return toast("Nama barang wajib diisi.");
- db.products.push({id:crypto.randomUUID(),name,cost,price,stock});save();$("pName").value="";$("pCost").value="";$("pPrice").value="";$("pStock").value="";renderAll();toast("Barang ditambahkan.")
+ db.products.push({id:uniqueId(),name,cost,price,stock});save();$("pName").value="";$("pCost").value="";$("pPrice").value="";$("pStock").value="";renderAll();toast("Barang ditambahkan.")
 }
 function renderProducts(){
  $("productsTable").innerHTML=db.products.map((p,i)=>`<tr><td>${esc(p.name)}</td><td>${rupiah(p.cost)}</td><td>${rupiah(p.price)}</td><td>${p.stock}</td><td><button class="mini del" onclick="deleteProduct(${i})">Hapus</button></td></tr>`).join("")||`<tr><td colspan="5">Belum ada barang.</td></tr>`
@@ -57,11 +58,10 @@ function calcSaleTotal(){$("saleTotal").textContent=rupiah((+$("salePrice").valu
 function addSale(){
  const p=db.products.find(x=>x.id===$("saleProduct").value),price=+$("salePrice").value||0,qty=+$("saleQty").value||0,date=$("saleDate").value||today();
  if(!p)return toast("Pilih barang."); if(qty<1)return toast("Jumlah minimal 1."); if(p.stock<qty)return toast("Stok tidak cukup.");
- const newId=crypto.randomUUID();
+ const newId=uniqueId();
  db.sales.push({id:newId,date,productId:p.id,product:p.name,price,qty,cost:p.cost,total:price*qty,profit:(price-p.cost)*qty});
  p.stock-=qty;save();$("saleProduct").value="";$("salePrice").value="";$("saleQty").value=1;$("stockInfo").textContent="";calcSaleTotal();renderAll();toast("Penjualan berhasil disimpan.")
  printReceipt(newId);
-}
 }
 function renderSales(){
  const q=$("saleSearch").value.toLowerCase();
