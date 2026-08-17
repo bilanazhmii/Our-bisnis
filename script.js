@@ -336,11 +336,9 @@ function boot(){
  if($("dashDate")) $("dashDate").onchange=renderDashboard;
 
  // Login tabs functionality
- if($("pinTab")) $("pinTab").onclick=()=>showLoginTab("pin");
- if($("emailTab")) $("emailTab").onclick=()=>showLoginTab("email");
+ if($("loginTab")) $("loginTab").onclick=()=>showLoginTab("login");
+ if($("registerTab")) $("registerTab").onclick=()=>showLoginTab("register");
  if($("emailLoginBtn")) $("emailLoginBtn").onclick=handleEmailLogin;
- if($("showRegisterBtn")) $("showRegisterBtn").onclick=showRegisterForm;
- if($("showLoginBtn")) $("showLoginBtn").onclick=showLoginForm;
  if($("registerBtn")) $("registerBtn").onclick=handleEmailRegister;
  if($("resendVerificationBtn")) $("resendVerificationBtn").onclick=handleResendVerification;
 
@@ -349,31 +347,19 @@ function boot(){
  if($("refreshUsersBtn")) $("refreshUsersBtn").onclick=loadUsers;
 }
 
-function showRegisterForm() {
-  if($("emailLoginForm")) $("emailLoginForm").classList.add("hidden");
-  if($("emailRegisterForm")) $("emailRegisterForm").classList.remove("hidden");
-  if($("resendVerificationBtn")) $("resendVerificationBtn").classList.add("hidden");
-}
-
-function showLoginForm() {
-  if($("emailRegisterForm")) $("emailRegisterForm").classList.add("hidden");
-  if($("emailLoginForm")) $("emailLoginForm").classList.remove("hidden");
-  if($("resendVerificationBtn")) $("resendVerificationBtn").classList.add("hidden");
-}
-
 function showLoginTab(tab) {
-  if(!$("pinTab") || !$("emailTab") || !$("pinLogin") || !$("emailLogin")) return;
+  if(!$("loginTab") || !$("registerTab") || !$("loginForm") || !$("registerForm")) return;
 
-  if (tab === "pin") {
-    $("pinTab").classList.add("active");
-    $("emailTab").classList.remove("active");
-    $("pinLogin").classList.remove("hidden");
-    $("emailLogin").classList.add("hidden");
+  if (tab === "login") {
+    $("loginTab").classList.add("active");
+    $("registerTab").classList.remove("active");
+    $("loginForm").classList.remove("hidden");
+    $("registerForm").classList.add("hidden");
   } else {
-    $("emailTab").classList.add("active");
-    $("pinTab").classList.remove("active");
-    $("emailLogin").classList.remove("hidden");
-    $("pinLogin").classList.add("hidden");
+    $("registerTab").classList.add("active");
+    $("loginTab").classList.remove("active");
+    $("registerForm").classList.remove("hidden");
+    $("loginForm").classList.add("hidden");
   }
   // Hide resend verification button when switching tabs
   if($("resendVerificationBtn")) $("resendVerificationBtn").classList.add("hidden");
@@ -537,7 +523,7 @@ function login(){
     // For now, we'll support both PIN and email/password
     // If it looks like an email, use Supabase auth
     if (pin.includes('@')) {
-      showLoginTab("email");
+      showLoginTab("login");
       if($("emailInput")) $("emailInput").value = pin;
       return;
     }
