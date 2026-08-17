@@ -39,7 +39,7 @@ Setup Supabase (Opsional - untuk sinkronisasi data):
 1. Buka file SUPABASE_SETUP.md untuk panduan lengkap.
 2. Copy config.example.js ke config.js dan isi dengan kredensial Supabase.
 3. Uncomment script config.js di index.html.
-4. Buat tabel database di Supabase sesuai panduan.
+4. Copy semua script dari setup_supabase.sql dan paste ke Supabase SQL Editor.
 5. Configure email/SMTP di Supabase Dashboard untuk email verification.
 6. Setup admin pertama dengan menjalankan SQL untuk mengubah role.
 7. Gunakan login email untuk sinkronisasi data antar perangkat.
