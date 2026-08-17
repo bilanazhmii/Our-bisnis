@@ -1,8 +1,8 @@
-// Vercel Serverless Function
+// Vercel Serverless Function (CommonJS)
 // Endpoint ini membaca environment variables dari Vercel
 // dan mengembalikan konfigurasi Supabase ke frontend
 
-export default function handler(req, res) {
+module.exports = function handler(req, res) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -19,4 +19,4 @@ export default function handler(req, res) {
     SUPABASE_URL: process.env.SUPABASE_URL || '',
     SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || ''
   });
-}
+};
