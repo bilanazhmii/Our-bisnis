@@ -32,10 +32,21 @@
     </div>
 
     <div id="emailLogin" class="hidden">
-      <input id="emailInput" type="email" placeholder="Email">
-      <input id="passwordInput" type="password" placeholder="Password">
-      <button id="emailLoginBtn" class="primary">Masuk</button>
-      <button id="registerBtn" class="secondary">Daftar Akun Baru</button>
+      <div id="emailLoginForm">
+        <input id="emailInput" type="email" placeholder="Email">
+        <input id="passwordInput" type="password" placeholder="Password">
+        <button id="emailLoginBtn" class="primary">Masuk</button>
+        <button id="showRegisterBtn" class="secondary">Daftar Akun Baru</button>
+      </div>
+
+      <div id="emailRegisterForm" class="hidden">
+        <input id="registerEmailInput" type="email" placeholder="Email">
+        <input id="registerPasswordInput" type="password" placeholder="Password (minimal 6 karakter)">
+        <input id="registerConfirmPasswordInput" type="password" placeholder="Konfirmasi Password">
+        <button id="registerBtn" class="primary">Daftar</button>
+        <button id="showLoginBtn" class="secondary">Kembali ke Login</button>
+      </div>
+
       <button id="resendVerificationBtn" class="secondary hidden">📧 Kirim Ulang Verifikasi Email</button>
     </div>
 
