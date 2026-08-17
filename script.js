@@ -3,6 +3,33 @@ const KEY="kopiTutugDataV2";
 const today=()=>new Date().toISOString().slice(0,10);
 const rupiah=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(Number(n)||0);
 const uniqueId=()=>crypto.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+// Supabase Configuration
+let supabase = null;
+let useSupabase = false;
+
+// Load Supabase configuration from window object (set by config.js or inline)
+function initSupabase() {
+  // Check if Supabase is available
+  if (typeof window.supabase === 'undefined') {
+    console.log('Supabase SDK not loaded, using local storage only');
+    return;
+  }
+
+  if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY) {
+    try {
+      supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+      useSupabase = true;
+      console.log('Supabase initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize Supabase:', error);
+    }
+  } else {
+    console.log('Supabase credentials not found, using local storage only');
+    console.log('To enable Supabase sync, copy config.example.js to config.js and add your credentials');
+  }
+}
+
 let db=JSON.parse(localStorage.getItem(KEY)||"null");
 if(!db){
   const oldSales=JSON.parse(localStorage.getItem("dataPenjualan")||"[]");
@@ -19,14 +46,118 @@ if(!db){
   })};
   localStorage.setItem(KEY,JSON.stringify(db));
 }
-function save(){localStorage.setItem(KEY,JSON.stringify(db))}
+function save(){localStorage.setItem(KEY,JSON.stringify(db)); syncToSupabase()}
+
+// Supabase Sync Functions
+async function syncToSupabase() {
+  if (!useSupabase || !supabase) return;
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // Sync products
+    const { error: productsError } = await supabase
+      .from('products')
+      .upsert(db.products.map(p => ({
+        id: p.id,
+        name: p.name,
+        cost: p.cost,
+        price: p.price,
+        stock: p.stock,
+        user_id: user.id
+      })), { onConflict: 'id' });
+
+    if (productsError) console.error('Error syncing products:', productsError);
+
+    // Sync sales
+    const { error: salesError } = await supabase
+      .from('sales')
+      .upsert(db.sales.map(s => ({
+        id: s.id,
+        date: s.date,
+        product_id: s.productId,
+        product: s.product,
+        price: s.price,
+        qty: s.qty,
+        cost: s.cost,
+        total: s.total,
+        profit: s.profit,
+        user_id: user.id
+      })), { onConflict: 'id' });
+
+    if (salesError) console.error('Error syncing sales:', salesError);
+
+    console.log('Data synced to Supabase');
+  } catch (error) {
+    console.error('Sync error:', error);
+  }
+}
+
+async function syncFromSupabase() {
+  if (!useSupabase || !supabase) return false;
+
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+
+    // Fetch products
+    const { data: products, error: productsError } = await supabase
+      .from('products')
+      .select('*')
+      .eq('user_id', user.id);
+
+    if (productsError) throw productsError;
+
+    // Fetch sales
+    const { data: sales, error: salesError } = await supabase
+      .from('sales')
+      .select('*')
+      .eq('user_id', user.id);
+
+    if (salesError) throw salesError;
+
+    // Update local database
+    if (products && products.length > 0) {
+      db.products = products.map(p => ({
+        id: p.id,
+        name: p.name,
+        cost: p.cost,
+        price: p.price,
+        stock: p.stock
+      }));
+    }
+
+    if (sales && sales.length > 0) {
+      db.sales = sales.map(s => ({
+        id: s.id,
+        date: s.date,
+        productId: s.product_id,
+        product: s.product,
+        price: s.price,
+        qty: s.qty,
+        cost: s.cost,
+        total: s.total,
+        profit: s.profit
+      }));
+    }
+
+    save();
+    console.log('Data synced from Supabase');
+    return true;
+  } catch (error) {
+    console.error('Sync from Supabase error:', error);
+    return false;
+  }
+}
 function toast(t){$("toast").textContent=t;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),2200)}
 function logged(){return sessionStorage.getItem("adminLogin")==="1"}
 function boot(){
+ initSupabase(); // Initialize Supabase
  $("pinInput").addEventListener("keydown",e=>{if(e.key==="Enter")login()});
  $("loginBtn").onclick=login;
- if(logged()) showApp(); 
- $("logoutBtn").onclick=()=>{sessionStorage.removeItem("adminLogin");location.reload()};
+ if(logged()) showApp();
+ $("logoutBtn").onclick=handleSupabaseLogout;
  $("menuBtn").onclick=()=>$("sideNav").classList.toggle("open");
  document.querySelectorAll(".nav-btn[data-page]").forEach(b=>b.onclick=()=>showPage(b.dataset.page));
  $("dashDate").value=today(); $("saleDate").value=today(); $("reportFrom").value=today(); $("reportTo").value=today();
@@ -36,8 +167,136 @@ function boot(){
  $("exportCsvBtn").onclick=exportCSV; $("printReportBtn").onclick=printReport;
  $("backupBtn").onclick=backup; $("restoreBtn").onclick=restore;
  $("changePinBtn").onclick=changePin; $("clearBtn").onclick=clearData; $("dashDate").onchange=renderDashboard;
+
+ // Login tabs functionality
+ $("pinTab").onclick=()=>showLoginTab("pin");
+ $("emailTab").onclick=()=>showLoginTab("email");
+ $("emailLoginBtn").onclick=handleEmailLogin;
+ $("registerBtn").onclick=handleEmailRegister;
 }
-function login(){if($("pinInput").value===db.pin){sessionStorage.setItem("adminLogin","1");showApp()}else $("loginMsg").textContent="PIN salah."}
+
+function showLoginTab(tab) {
+  if (tab === "pin") {
+    $("pinTab").classList.add("active");
+    $("emailTab").classList.remove("active");
+    $("pinLogin").classList.remove("hidden");
+    $("emailLogin").classList.add("hidden");
+  } else {
+    $("emailTab").classList.add("active");
+    $("pinTab").classList.remove("active");
+    $("emailLogin").classList.remove("hidden");
+    $("pinLogin").classList.add("hidden");
+  }
+}
+
+async function handleEmailLogin() {
+  const email = $("emailInput").value.trim();
+  const password = $("passwordInput").value;
+
+  if (!email || !password) {
+    $("loginMsg").textContent = "Email dan password wajib diisi.";
+    return;
+  }
+
+  if (!useSupabase || !supabase) {
+    $("loginMsg").textContent = "Supabase tidak dikonfigurasi. Gunakan login PIN.";
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password
+    });
+
+    if (error) throw error;
+
+    sessionStorage.setItem("adminLogin","1");
+    sessionStorage.setItem("supabaseUser", JSON.stringify(data.user));
+    showApp();
+
+    // Sync data from Supabase after successful login
+    const synced = await syncFromSupabase();
+    if (synced) {
+      renderAll();
+      toast("Data berhasil disinkronisasi dari cloud!");
+    } else {
+      toast("Login berhasil, tapi gagal sinkronisasi data.");
+    }
+
+  } catch (error) {
+    $("loginMsg").textContent = "Login gagal: " + error.message;
+  }
+}
+
+async function handleEmailRegister() {
+  const email = $("emailInput").value.trim();
+  const password = $("passwordInput").value;
+
+  if (!email || !password) {
+    $("loginMsg").textContent = "Email dan password wajib diisi.";
+    return;
+  }
+
+  if (password.length < 6) {
+    $("loginMsg").textContent = "Password minimal 6 karakter.";
+    return;
+  }
+
+  if (!useSupabase || !supabase) {
+    $("loginMsg").textContent = "Supabase tidak dikonfigurasi. Gunakan login PIN.";
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email: email,
+      password: password
+    });
+
+    if (error) throw error;
+
+    toast("Registrasi berhasil! Silakan cek email untuk konfirmasi.");
+
+  } catch (error) {
+    $("loginMsg").textContent = "Registrasi gagal: " + error.message;
+  }
+}
+function login(){
+  const pin = $("pinInput").value;
+
+  // Check if using Supabase authentication
+  if (useSupabase && supabase) {
+    // For now, we'll support both PIN and email/password
+    // If it looks like an email, use Supabase auth
+    if (pin.includes('@')) {
+      showLoginTab("email");
+      $("emailInput").value = pin;
+      return;
+    }
+  }
+
+  // Fallback to PIN authentication
+  if(pin===db.pin){
+    sessionStorage.setItem("adminLogin","1");
+    showApp();
+    // If Supabase is available, sync data after login
+    if (useSupabase) {
+      syncFromSupabase().then(() => renderAll());
+    }
+  } else {
+    $("loginMsg").textContent="PIN salah.";
+  }
+}
+
+async function handleSupabaseLogout() {
+  if (useSupabase && supabase) {
+    await supabase.auth.signOut();
+    sessionStorage.removeItem("supabaseUser");
+  }
+  sessionStorage.removeItem("adminLogin");
+  location.reload();
+}
 function showApp(){$("loginScreen").classList.add("hidden");$("app").classList.remove("hidden");renderAll()}
 function showPage(id){document.querySelectorAll(".page").forEach(p=>p.classList.add("hidden"));$(id).classList.remove("hidden");document.querySelectorAll(".nav-btn[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===id));$("sideNav").classList.remove("open");renderAll()}
 function renderAll(){renderProducts();fillProductSelect();renderSales();renderDashboard();renderReport()}

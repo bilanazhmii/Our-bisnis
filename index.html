@@ -9,6 +9,9 @@
 <link rel="icon" href="icon.png" type="image/png">
 <title>Data Penjualan</title>
 <link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Comment out config.js until configured -->
+<!-- <script src="config.js"></script> -->
 </head>
 <body>
 <div id="loginScreen" class="login-screen">
@@ -16,9 +19,25 @@
     <div class="brand-mark"><img src="icon.png" alt="Logo"></div>
     <h1>Data Penjualan</h1>
     <p>Masuk sebagai admin</p>
-    <input id="pinInput" type="password" inputmode="numeric" maxlength="8" placeholder="PIN admin">
-    <button id="loginBtn" class="primary">Masuk</button>
-    <small>PIN awal: <b>1234</b></small>
+
+    <div class="login-tabs">
+      <button id="pinTab" class="tab-btn active">PIN</button>
+      <button id="emailTab" class="tab-btn">Email</button>
+    </div>
+
+    <div id="pinLogin">
+      <input id="pinInput" type="password" inputmode="numeric" maxlength="8" placeholder="PIN admin">
+      <button id="loginBtn" class="primary">Masuk</button>
+      <small>PIN awal: <b>1234</b></small>
+    </div>
+
+    <div id="emailLogin" class="hidden">
+      <input id="emailInput" type="email" placeholder="Email">
+      <input id="passwordInput" type="password" placeholder="Password">
+      <button id="emailLoginBtn" class="primary">Masuk</button>
+      <button id="registerBtn" class="secondary">Daftar Akun Baru</button>
+    </div>
+
     <div id="loginMsg" class="msg"></div>
   </div>
 </div>

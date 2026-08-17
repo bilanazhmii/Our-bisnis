@@ -2,6 +2,7 @@
 
 Fitur:
 - Login admin (PIN awal 1234)
+- Login dengan email (Supabase) untuk sinkronisasi data antar perangkat
 - Dashboard penjualan harian
 - Grafik 7 hari dan barang terlaris
 - Tanggal transaksi cukup dipilih sekali
@@ -13,15 +14,24 @@ Fitur:
 - Cetak laporan / Save as PDF dari dialog print
 - Backup & restore JSON
 - Ganti PIN
+- Sinkronisasi data cloud dengan Supabase
 - PWA: dapat di-install di Windows/Android/iPhone jika di-host melalui HTTPS
 
 Catatan:
-- Data saat ini tersimpan lokal di perangkat/browser (localStorage), jadi belum otomatis sinkron antar perangkat.
-- Untuk data yang sama-sama bisa dibuka dari banyak HP/komputer, perlu backend/database online.
+- Data default tersimpan lokal di perangkat/browser (localStorage).
+- Untuk sinkronisasi data antar perangkat, gunakan login email dengan Supabase.
+- Lihat file SUPABASE_SETUP.md untuk panduan setup Supabase.
 
 Cara menjalankan:
 1. Buka folder ini di VS Code.
 2. Jalankan Live Server.
 3. Buka URL http://localhost:5500 (atau port Live Server kamu).
-4. Login dengan PIN 1234.
+4. Login dengan PIN 1234 (local) atau setup Supabase untuk login email.
 5. Untuk instal di HP, upload project ke hosting HTTPS (mis. GitHub Pages/Netlify/Vercel), lalu buka URL tersebut dari HP dan pilih Add to Home Screen/Install App.
+
+Setup Supabase (Opsional - untuk sinkronisasi data):
+1. Buka file SUPABASE_SETUP.md untuk panduan lengkap.
+2. Copy config.example.js ke config.js dan isi dengan kredensial Supabase.
+3. Uncomment script config.js di index.html.
+4. Buat tabel database di Supabase sesuai panduan.
+5. Gunakan login email untuk sinkronisasi data antar perangkat.
