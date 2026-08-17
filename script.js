@@ -47,10 +47,6 @@ var registerInProgress = false;
 var registerCooldownUntil = 0;
 var verificationNotice = "";
 
-function getAuthRedirectUrl() {
-  return window.location.origin + window.location.pathname;
-}
-
 function readVerificationNotice() {
   var params = new URLSearchParams(window.location.hash.slice(1));
   if (params.get("type") === "signup" && params.get("access_token")) {
@@ -272,7 +268,7 @@ async function supabaseFetch(path, options) {
 }
 
 async function supabaseSignUp(email, password) {
-  return supabaseFetch("/auth/v1/signup?redirect_to=" + encodeURIComponent(getAuthRedirectUrl()), {
+  return supabaseFetch("/auth/v1/signup", {
     method: "POST",
     body: JSON.stringify({
       email: email.trim().toLowerCase(),
@@ -323,7 +319,7 @@ async function supabaseSignOut() {
 }
 
 async function supabaseResendVerification(email) {
-  return supabaseFetch("/auth/v1/resend?redirect_to=" + encodeURIComponent(getAuthRedirectUrl()), {
+  return supabaseFetch("/auth/v1/resend", {
     method: "POST",
     body: JSON.stringify({
       type: "signup",
