@@ -339,12 +339,26 @@ function boot(){
  if($("pinTab")) $("pinTab").onclick=()=>showLoginTab("pin");
  if($("emailTab")) $("emailTab").onclick=()=>showLoginTab("email");
  if($("emailLoginBtn")) $("emailLoginBtn").onclick=handleEmailLogin;
+ if($("showRegisterBtn")) $("showRegisterBtn").onclick=showRegisterForm;
+ if($("showLoginBtn")) $("showLoginBtn").onclick=showLoginForm;
  if($("registerBtn")) $("registerBtn").onclick=handleEmailRegister;
  if($("resendVerificationBtn")) $("resendVerificationBtn").onclick=handleResendVerification;
 
  // Admin dashboard functionality (only if elements exist)
  if($("userSearch")) $("userSearch").oninput=loadUsers;
  if($("refreshUsersBtn")) $("refreshUsersBtn").onclick=loadUsers;
+}
+
+function showRegisterForm() {
+  if($("emailLoginForm")) $("emailLoginForm").classList.add("hidden");
+  if($("emailRegisterForm")) $("emailRegisterForm").classList.remove("hidden");
+  if($("resendVerificationBtn")) $("resendVerificationBtn").classList.add("hidden");
+}
+
+function showLoginForm() {
+  if($("emailRegisterForm")) $("emailRegisterForm").classList.add("hidden");
+  if($("emailLoginForm")) $("emailLoginForm").classList.remove("hidden");
+  if($("resendVerificationBtn")) $("resendVerificationBtn").classList.add("hidden");
 }
 
 function showLoginTab(tab) {
@@ -365,7 +379,7 @@ function showLoginTab(tab) {
   if($("resendVerificationBtn")) $("resendVerificationBtn").classList.add("hidden");
 }
 
-async async function handleEmailLogin() {
+async function handleEmailLogin() {
   if(!$("emailInput") || !$("passwordInput") || !$("loginMsg")) return;
 
   const email = $("emailInput").value.trim();
@@ -421,18 +435,24 @@ async async function handleEmailLogin() {
 }
 
 async function handleEmailRegister() {
-  if(!$("emailInput") || !$("passwordInput") || !$("loginMsg")) return;
+  if(!$("registerEmailInput") || !$("registerPasswordInput") || !$("registerConfirmPasswordInput") || !$("loginMsg")) return;
 
-  const email = $("emailInput").value.trim();
-  const password = $("passwordInput").value;
+  const email = $("registerEmailInput").value.trim();
+  const password = $("registerPasswordInput").value;
+  const confirmPassword = $("registerConfirmPasswordInput").value;
 
-  if (!email || !password) {
-    $("loginMsg").textContent = "Email dan password wajib diisi.";
+  if (!email || !password || !confirmPassword) {
+    $("loginMsg").textContent = "Email, password, dan konfirmasi password wajib diisi.";
     return;
   }
 
   if (password.length < 6) {
     $("loginMsg").textContent = "Password minimal 6 karakter.";
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    $("loginMsg").textContent = "Konfirmasi password tidak cocok.";
     return;
   }
 
