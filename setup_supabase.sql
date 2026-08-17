@@ -42,6 +42,74 @@ CREATE TABLE IF NOT EXISTS user_roles (
   CONSTRAINT valid_role CHECK (role IN ('user', 'admin', 'super_admin'))
 );
 
+-- Upgrade older installations without removing existing business data.
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS cost NUMERIC DEFAULT 0;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS price NUMERIC DEFAULT 0;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS stock INTEGER DEFAULT 0;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS date TEXT;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS product_id TEXT;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS product TEXT;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS price NUMERIC DEFAULT 0;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS qty INTEGER DEFAULT 0;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS cost NUMERIC DEFAULT 0;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS total NUMERIC DEFAULT 0;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS profit NUMERIC DEFAULT 0;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'user';
+ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'valid_role' AND conrelid = 'public.user_roles'::regclass
+  ) THEN
+    ALTER TABLE public.user_roles
+      ADD CONSTRAINT valid_role CHECK (role IN ('user', 'admin', 'super_admin'));
+  END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS products_user_id_idx ON public.products (user_id);
+CREATE INDEX IF NOT EXISTS sales_user_id_idx ON public.sales (user_id);
+CREATE INDEX IF NOT EXISTS sales_user_id_date_idx ON public.sales (user_id, date);
+
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS products_set_updated_at ON public.products;
+CREATE TRIGGER products_set_updated_at
+  BEFORE UPDATE ON public.products
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS sales_set_updated_at ON public.sales;
+CREATE TRIGGER sales_set_updated_at
+  BEFORE UPDATE ON public.sales
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+DROP TRIGGER IF EXISTS user_roles_set_updated_at ON public.user_roles;
+CREATE TRIGGER user_roles_set_updated_at
+  BEFORE UPDATE ON public.user_roles
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
 -- Helper functions must be created before RLS policies. They avoid recursive
 -- user_roles policies when checking whether the current user is an admin.
 CREATE OR REPLACE FUNCTION public.is_admin()
@@ -175,7 +243,7 @@ RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO public.user_roles (id, user_id, role, email)
   VALUES (
-    gen_random_uuid()::text,
+    NEW.id::text,
     NEW.id::text,
     'user',
     NEW.email

@@ -1,5 +1,6 @@
 const $ = function(id) { return document.getElementById(id); };
 const KEY = "kopiTutugDataV2";
+const PENDING_DELETES_KEY = KEY + "PendingDeletes";
 const today = function() { return new Date().toISOString().slice(0, 10); };
 const rupiah = function(n) {
   return new Intl.NumberFormat("id-ID", {
@@ -42,6 +43,18 @@ var useSupabase = false;
 var currentUser = null;
 var userRole = "user";
 var cachedUsers = [];
+var syncQueue = Promise.resolve();
+var pendingDeletes = { products: [], sales: [] };
+
+try {
+  pendingDeletes = JSON.parse(localStorage.getItem(PENDING_DELETES_KEY) || '{"products":[],"sales":[]}');
+} catch (error) {
+  localStorage.removeItem(PENDING_DELETES_KEY);
+}
+
+if (!pendingDeletes || typeof pendingDeletes !== "object") pendingDeletes = { products: [], sales: [] };
+if (!Array.isArray(pendingDeletes.products)) pendingDeletes.products = [];
+if (!Array.isArray(pendingDeletes.sales)) pendingDeletes.sales = [];
 
 function hasValidSupabaseConfig(config) {
   return !!(
@@ -369,7 +382,21 @@ function saveLocal() {
 
 function save() {
   saveLocal();
-  void syncToSupabase();
+  syncQueue = syncQueue.catch(function() { return false; }).then(syncToSupabase);
+}
+
+function savePendingDeletes() {
+  localStorage.setItem(PENDING_DELETES_KEY, JSON.stringify(pendingDeletes));
+}
+
+function queueRemoteDelete(table, id) {
+  if (!id) return;
+  var list = table === "products" ? pendingDeletes.products : pendingDeletes.sales;
+  var userId = currentUser && currentUser.id ? currentUser.id : null;
+  if (!list.some(function(item) { return item.id === id && item.userId === userId; })) {
+    list.push({ id: id, userId: userId });
+    savePendingDeletes();
+  }
 }
 
 async function syncToSupabase() {
@@ -380,8 +407,13 @@ async function syncToSupabase() {
 
   try {
     var userId = currentUser.id;
-    var remoteProducts = await supabaseSelect('products', accessToken, 'user_id=eq.' + encodeURIComponent(userId));
-    var remoteSales = await supabaseSelect('sales', accessToken, 'user_id=eq.' + encodeURIComponent(userId));
+    var salesToDelete = pendingDeletes.sales.filter(function(item) { return item.userId === userId; });
+    var productsToDelete = pendingDeletes.products.filter(function(item) { return item.userId === userId; });
+    await Promise.all(salesToDelete.map(function(item) { return supabaseDelete('sales', item.id, accessToken); }));
+    await Promise.all(productsToDelete.map(function(item) { return supabaseDelete('products', item.id, accessToken); }));
+    pendingDeletes.sales = pendingDeletes.sales.filter(function(item) { return item.userId !== userId; });
+    pendingDeletes.products = pendingDeletes.products.filter(function(item) { return item.userId !== userId; });
+    savePendingDeletes();
     if (db.products.length > 0) {
       await supabaseUpsert('products', db.products.map(function(p) {
         return { id: p.id, name: p.name, cost: p.cost, price: p.price, stock: p.stock, user_id: userId };
@@ -390,17 +422,11 @@ async function syncToSupabase() {
     if (db.sales.length > 0) {
       await supabaseUpsert('sales', db.sales.map(function(s) {
         return {
-          id: s.id, date: s.date, product_id: s.productId, product: s.product,
+          id: s.id, date: s.date, product_id: s.productId || ("legacy-" + s.id), product: s.product,
           price: s.price, qty: s.qty, cost: s.cost, total: s.total, profit: s.profit, user_id: userId
         };
       }), accessToken);
     }
-    await Promise.all((remoteProducts || [])
-      .filter(function(product) { return !db.products.some(function(localProduct) { return localProduct.id === product.id; }); })
-      .map(function(product) { return supabaseDelete('products', product.id, accessToken); }));
-    await Promise.all((remoteSales || [])
-      .filter(function(sale) { return !db.sales.some(function(localSale) { return localSale.id === sale.id; }); })
-      .map(function(sale) { return supabaseDelete('sales', sale.id, accessToken); }));
   } catch (error) {
     console.error('Sync error:', error);
   }
@@ -932,7 +958,12 @@ function renderProducts() {
 }
 
 function deleteProduct(i) {
-  if (confirm("Hapus barang ini?")) { db.products.splice(i, 1); save(); renderAll(); }
+  if (confirm("Hapus barang ini?")) {
+    queueRemoteDelete("products", db.products[i].id);
+    db.products.splice(i, 1);
+    save();
+    renderAll();
+  }
 }
 
 function fillProductSelect() {
@@ -991,6 +1022,7 @@ function deleteSale(id) {
   if (!s || !confirm("Hapus transaksi dan kembalikan stok?")) return;
   var p = db.products.find(function(x) { return x.id === s.productId; });
   if (p) p.stock += s.qty;
+  queueRemoteDelete("sales", s.id);
   db.sales = db.sales.filter(function(x) { return x.id !== id; });
   save();
   renderAll();
@@ -1088,6 +1120,12 @@ function restore() {
       var x = JSON.parse(r.result);
       if (!x.products || !x.sales) throw 0;
       if (!confirm("Restore akan mengganti data saat ini. Lanjut?")) return;
+      db.products.forEach(function(product) {
+        if (!x.products.some(function(restoredProduct) { return restoredProduct.id === product.id; })) queueRemoteDelete("products", product.id);
+      });
+      db.sales.forEach(function(sale) {
+        if (!x.sales.some(function(restoredSale) { return restoredSale.id === sale.id; })) queueRemoteDelete("sales", sale.id);
+      });
       db = x;
       save();
       renderAll();
@@ -1110,6 +1148,8 @@ function changePin() {
 
 function clearData() {
   if (confirm("Hapus SEMUA produk dan transaksi?")) {
+    db.sales.forEach(function(sale) { queueRemoteDelete("sales", sale.id); });
+    db.products.forEach(function(product) { queueRemoteDelete("products", product.id); });
     db.products = [];
     db.sales = [];
     save();
