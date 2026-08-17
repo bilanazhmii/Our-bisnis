@@ -25,14 +25,32 @@ function loadSupabaseSDK() {
   });
 }
 
-// Load Supabase configuration from window object (set by config.js or inline)
+// Fetch Supabase config from Vercel API endpoint
+async function fetchSupabaseConfig() {
+  try {
+    const res = await fetch('/api/config');
+    if (!res.ok) throw new Error('Failed to fetch config');
+    const config = await res.json();
+    return config;
+  } catch (error) {
+    console.error('Failed to fetch config from API:', error);
+    // Fallback to window config (config.js)
+    return {
+      SUPABASE_URL: window.SUPABASE_URL || '',
+      SUPABASE_ANON_KEY: window.SUPABASE_ANON_KEY || ''
+    };
+  }
+}
+
+// Load Supabase configuration from API or window object
 async function initSupabase() {
   try {
     await loadSupabaseSDK();
-    if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY &&
-        window.SUPABASE_URL.includes('supabase.co') &&
-        !window.SUPABASE_ANON_KEY.includes('your-anon-key')) {
-      supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+    const config = await fetchSupabaseConfig();
+    if (config.SUPABASE_URL && config.SUPABASE_ANON_KEY &&
+        config.SUPABASE_URL.includes('supabase.co') &&
+        !config.SUPABASE_ANON_KEY.includes('your-anon-key')) {
+      supabase = window.supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY);
       useSupabase = true;
       console.log('Supabase initialized successfully');
     } else {
@@ -314,10 +332,6 @@ function boot(){
    }
  }); // Initialize Supabase asynchronously
 
- // PIN Login handlers
- if($("pinInput")) $("pinInput").addEventListener("keydown",e=>{if(e.key==="Enter")login()});
- if($("loginBtn")) $("loginBtn").onclick=login;
-
  // Check if already logged in
  if(logged()) showApp();
 
@@ -401,7 +415,7 @@ async function handleEmailLogin() {
   }
 
   if (!useSupabase || !supabase) {
-    $("loginMsg").textContent = "⚠️ Supabase belum dikonfigurasi. Gunakan login PIN (1234).";
+    $("loginMsg").textContent = "⚠️ Supabase belum dikonfigurasi. Periksa env vars di Vercel.";
     toast("Supabase belum dikonfigurasi");
     return;
   }
@@ -485,7 +499,7 @@ async function handleEmailRegister() {
   }
 
   if (!useSupabase || !supabase) {
-    $("loginMsg").textContent = "⚠️ Supabase belum dikonfigurasi. Gunakan login PIN (1234).";
+    $("loginMsg").textContent = "⚠️ Supabase belum dikonfigurasi. Periksa env vars di Vercel.";
     toast("Supabase belum dikonfigurasi");
     return;
   }
@@ -566,38 +580,6 @@ async function handleResendVerification() {
     $("resendVerificationBtn").disabled = false;
   }
 }
-function login(){
-  if(!$("pinInput")) return;
-
-  const pin = $("pinInput").value;
-
-  // Check if using Supabase authentication
-  if (useSupabase && supabase) {
-    // For now, we'll support both PIN and email/password
-    // If it looks like an email, use Supabase auth
-    if (pin.includes('@')) {
-      showLoginTab("login");
-      if($("emailInput")) $("emailInput").value = pin;
-      return;
-    }
-  }
-
-  // Fallback to PIN authentication
-  if(pin===db.pin){
-    sessionStorage.setItem("adminLogin","1");
-    showApp();
-    // If Supabase is available, sync data after login
-    if (useSupabase) {
-      syncFromSupabase().then(() => renderAll());
-    }
-  } else {
-    if($("loginMsg")) $("loginMsg").textContent="PIN salah.";
-  }
-
-  // Hide resend verification button on PIN login
-  if($("resendVerificationBtn")) $("resendVerificationBtn").classList.add("hidden");
-}
-
 async function handleSupabaseLogout() {
   if (useSupabase && supabase) {
     await supabase.auth.signOut();

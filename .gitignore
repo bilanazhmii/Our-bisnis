@@ -5,6 +5,7 @@
 
 # Config files with sensitive data
 config.js
+!api/config.js
 
 # Dependencies
 node_modules/
