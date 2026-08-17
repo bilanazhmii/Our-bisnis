@@ -10,7 +10,7 @@
 <title>Data Penjualan</title>
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- Comment out config.js until configured -->
+<!-- Uncomment script config.js below after copying config.example.js to config.js and adding your credentials -->
 <!-- <script src="config.js"></script> -->
 </head>
 <body>
@@ -55,6 +55,7 @@
   <button data-page="laporan" class="nav-btn"> Laporan</button>
   <button data-page="backup" class="nav-btn"> Backup & Restore</button>
   <button data-page="pengaturan" class="nav-btn"> Pengaturan</button>
+  <button data-page="admin" class="nav-btn admin-only hidden"> Admin Dashboard</button>
   <button id="logoutBtn" class="nav-btn danger"> Keluar</button>
 </nav>
 
@@ -147,6 +148,26 @@
     <button id="changePinBtn" class="primary">Simpan PIN</button><div id="pinMsg" class="msg"></div>
   </div>
   <div class="card"><h2>Data</h2><button id="clearBtn" class="danger-btn">⚠️ Hapus Semua Data</button></div>
+</section>
+
+<section id="admin" class="page hidden">
+  <div class="page-head"><div><h1>Admin Dashboard</h1><p>Kelola user dan role system.</p></div></div>
+  <div class="card">
+    <h2>Daftar User</h2>
+    <div class="toolbar">
+      <input id="userSearch" placeholder="🔎 Cari user...">
+      <button id="refreshUsersBtn" class="secondary">🔄 Refresh</button>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Email</th><th>Role</th><th>Terdaftar</th><th>Aksi</th></tr></thead><tbody id="usersTable"></tbody></table></div>
+  </div>
+  <div class="card">
+    <h2>Statistik User</h2>
+    <div class="stats">
+      <div class="stat"><span>Total User</span><strong id="totalUsers">0</strong></div>
+      <div class="stat"><span>Admin</span><strong id="totalAdmins">0</strong></div>
+      <div class="stat"><span>User Biasa</span><strong id="totalRegularUsers">0</strong></div>
+    </div>
+  </div>
 </section>
 </main>
 </div>

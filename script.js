@@ -7,6 +7,8 @@ const uniqueId=()=>crypto.randomUUID?.()||`${Date.now()}-${Math.random().toStrin
 // Supabase Configuration
 let supabase = null;
 let useSupabase = false;
+let currentUser = null;
+let userRole = 'user'; // 'user', 'admin', 'super_admin'
 
 // Load Supabase configuration from window object (set by config.js or inline)
 function initSupabase() {
@@ -101,6 +103,9 @@ async function syncFromSupabase() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
 
+    // Fetch user role
+    await fetchUserRole(user.id);
+
     // Fetch products
     const { data: products, error: productsError } = await supabase
       .from('products')
@@ -150,6 +155,135 @@ async function syncFromSupabase() {
     return false;
   }
 }
+
+// Role Management Functions
+async function fetchUserRole(userId) {
+  if (!useSupabase || !supabase) return;
+
+  try {
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching user role:', error);
+      userRole = 'user';
+      return;
+    }
+
+    userRole = data.role || 'user';
+    console.log('User role:', userRole);
+  } catch (error) {
+    console.error('Error fetching user role:', error);
+    userRole = 'user';
+  }
+}
+
+function isAdmin() {
+  return userRole === 'admin' || userRole === 'super_admin';
+}
+
+function isSuperAdmin() {
+  return userRole === 'super_admin';
+}
+
+async function loadUsers() {
+  if (!useSupabase || !supabase || !isAdmin()) return;
+
+  try {
+    const { data: users, error } = await supabase
+      .from('user_roles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    renderUsersTable(users || []);
+    updateUserStats(users || []);
+  } catch (error) {
+    console.error('Error loading users:', error);
+    toast('Gagal memuat daftar user');
+  }
+}
+
+function renderUsersTable(users) {
+  const search = $("userSearch").value.toLowerCase();
+  const filtered = users.filter(u => u.email.toLowerCase().includes(search));
+
+  $("usersTable").innerHTML = filtered.map(u => `
+    <tr>
+      <td>${esc(u.email)}</td>
+      <td>
+        <select onchange="changeUserRole('${u.id}', this.value)" ${!isSuperAdmin() && u.role === 'super_admin' ? 'disabled' : ''}>
+          <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
+          <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
+          <option value="super_admin" ${u.role === 'super_admin' ? 'selected' : ''} ${!isSuperAdmin() ? 'disabled' : ''}>Super Admin</option>
+        </select>
+      </td>
+      <td>${new Date(u.created_at).toLocaleDateString('id-ID')}</td>
+      <td>
+        ${isSuperAdmin() ? `<button class="mini del" onclick="deleteUser('${u.id}')">Hapus</button>` : ''}
+      </td>
+    </tr>
+  `).join('') || '<tr><td colspan="4">Tidak ada user.</td></tr>';
+}
+
+function updateUserStats(users) {
+  $("totalUsers").textContent = users.length;
+  $("totalAdmins").textContent = users.filter(u => u.role === 'admin' || u.role === 'super_admin').length;
+  $("totalRegularUsers").textContent = users.filter(u => u.role === 'user').length;
+}
+
+async function changeUserRole(userId, newRole) {
+  if (!useSupabase || !supabase || !isSuperAdmin()) {
+    toast('Hanya super admin yang bisa mengubah role');
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('user_roles')
+      .update({ role: newRole })
+      .eq('id', userId);
+
+    if (error) throw error;
+
+    toast('Role berhasil diubah');
+    loadUsers();
+  } catch (error) {
+    console.error('Error changing user role:', error);
+    toast('Gagal mengubah role');
+  }
+}
+
+async function deleteUser(userId) {
+  if (!confirm('Hapus user ini? Data user akan dihapus permanen.')) return;
+
+  if (!useSupabase || !supabase || !isSuperAdmin()) {
+    toast('Hanya super admin yang bisa menghapus user');
+    return;
+  }
+
+  try {
+    // Delete from user_roles
+    const { error: roleError } = await supabase
+      .from('user_roles')
+      .delete()
+      .eq('id', userId);
+
+    if (roleError) throw roleError;
+
+    // Note: Deleting from auth.users requires service role key
+    // This should be done via edge function or server-side
+    toast('User role dihapus. Hapus auth user melalui dashboard Supabase.');
+    loadUsers();
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    toast('Gagal menghapus user');
+  }
+}
 function toast(t){$("toast").textContent=t;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),2200)}
 function logged(){return sessionStorage.getItem("adminLogin")==="1"}
 function boot(){
@@ -173,6 +307,10 @@ function boot(){
  $("emailTab").onclick=()=>showLoginTab("email");
  $("emailLoginBtn").onclick=handleEmailLogin;
  $("registerBtn").onclick=handleEmailRegister;
+
+ // Admin dashboard functionality (only if elements exist)
+ if($("userSearch")) $("userSearch").oninput=loadUsers;
+ if($("refreshUsersBtn")) $("refreshUsersBtn").onclick=loadUsers;
 }
 
 function showLoginTab(tab) {
@@ -211,8 +349,20 @@ async function handleEmailLogin() {
 
     if (error) throw error;
 
+    // Check email verification
+    if (!data.user.email_confirmed_at) {
+      $("loginMsg").textContent = "Email belum diverifikasi. Silakan cek email Anda untuk link verifikasi.";
+      return;
+    }
+
+    // Set current user
+    currentUser = data.user;
     sessionStorage.setItem("adminLogin","1");
     sessionStorage.setItem("supabaseUser", JSON.stringify(data.user));
+
+    // Fetch user role
+    await fetchUserRole(data.user.id);
+
     showApp();
 
     // Sync data from Supabase after successful login
@@ -256,7 +406,16 @@ async function handleEmailRegister() {
 
     if (error) throw error;
 
-    toast("Registrasi berhasil! Silakan cek email untuk konfirmasi.");
+    // Check if email confirmation is required
+    if (data.user && !data.session) {
+      toast("Registrasi berhasil! Silakan cek email untuk verifikasi sebelum login.");
+    } else if (data.user && data.session) {
+      // Auto login if email confirmation is disabled (not recommended)
+      sessionStorage.setItem("adminLogin","1");
+      sessionStorage.setItem("supabaseUser", JSON.stringify(data.user));
+      showApp();
+      toast("Registrasi berhasil! Anda sudah login.");
+    }
 
   } catch (error) {
     $("loginMsg").textContent = "Registrasi gagal: " + error.message;
@@ -295,10 +454,47 @@ async function handleSupabaseLogout() {
     sessionStorage.removeItem("supabaseUser");
   }
   sessionStorage.removeItem("adminLogin");
+  currentUser = null;
+  userRole = 'user';
   location.reload();
 }
-function showApp(){$("loginScreen").classList.add("hidden");$("app").classList.remove("hidden");renderAll()}
-function showPage(id){document.querySelectorAll(".page").forEach(p=>p.classList.add("hidden"));$(id).classList.remove("hidden");document.querySelectorAll(".nav-btn[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===id));$("sideNav").classList.remove("open");renderAll()}
+function showApp(){
+  $("loginScreen").classList.add("hidden");
+  $("app").classList.remove("hidden");
+
+  // Show/hide admin elements based on role
+  const adminElements = document.querySelectorAll('.admin-only');
+  adminElements.forEach(el => {
+    if (isAdmin()) {
+      el.classList.remove('hidden');
+      el.classList.add('visible');
+    } else {
+      el.classList.add('hidden');
+      el.classList.remove('visible');
+    }
+  });
+
+  renderAll();
+}
+function showPage(id){
+  // Check admin access for admin page
+  if (id === 'admin' && !isAdmin()) {
+    toast('Akses ditolak. Halaman ini khusus admin.');
+    return;
+  }
+
+  document.querySelectorAll(".page").forEach(p=>p.classList.add("hidden"));
+  $(id).classList.remove("hidden");
+  document.querySelectorAll(".nav-btn[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===id));
+  $("sideNav").classList.remove("open");
+
+  // Load admin data if accessing admin page
+  if (id === 'admin') {
+    loadUsers();
+  }
+
+  renderAll();
+}
 function renderAll(){renderProducts();fillProductSelect();renderSales();renderDashboard();renderReport()}
 function addProduct(){
  const name=$("pName").value.trim(),cost=+$("pCost").value||0,price=+$("pPrice").value||0,stock=+$("pStock").value||0;
