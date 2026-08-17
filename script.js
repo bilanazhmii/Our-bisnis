@@ -18,17 +18,10 @@ function loadSupabaseSDK() {
       resolve();
       return;
     }
-    // Check if script tag already exists
-    if (document.querySelector('script[src*="supabase-js"]')) {
-      // Wait for it to load
-      const checkInterval = setInterval(() => {
-        if (typeof window.supabase !== 'undefined') {
-          clearInterval(checkInterval);
-          resolve();
-        }
-      }, 100);
-      setTimeout(() => clearInterval(checkInterval), 10000);
-      return;
+    // Check if script tag already exists - if so, remove it first to avoid double declaration
+    const existingScript = document.querySelector('script[src*="supabase-js"]');
+    if (existingScript) {
+      existingScript.remove();
     }
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
