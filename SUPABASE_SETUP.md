@@ -40,10 +40,7 @@ window.SUPABASE_URL = 'https://your-project-id.supabase.co';
 window.SUPABASE_ANON_KEY = 'your-anon-key-here';
 ```
 
-4. Uncomment script config.js di `index.html`:
-```html
-<script src="config.js"></script>
-```
+4. Tidak perlu mengubah `index.html`. Aplikasi memuat `config.js` otomatis hanya saat endpoint Vercel tidak tersedia.
 
 **CATATAN**: File `config.js` sudah ada di `.gitignore` untuk keamanan.
 
@@ -58,6 +55,8 @@ SUPABASE_ANON_KEY=your-anon-key-here
 ```
 
 **PENTING**: Jangan pernah commit file `.env` ke GitHub! File ini sudah ada di `.gitignore`.
+
+Untuk Vercel, file `.env` lokal tidak diunggah otomatis. Buka **Project Settings → Environment Variables**, lalu tambahkan `SUPABASE_URL` dan `SUPABASE_ANON_KEY` dengan nilai yang sama untuk environment **Production**, **Preview**, dan **Development**. Setelah itu lakukan redeploy.
 
 ## Langkah 4: Buat Tabel di Database
 
@@ -203,7 +202,7 @@ WHERE email = 'your-email@example.com';
 
 ### Error "Supabase credentials not found"
 - Pastikan `config.js` sudah diisi dengan kredensial yang benar
-- Pastikan file `config.js` diload sebelum `script.js`
+- Pastikan `config.js` berisi kredensial yang benar. Aplikasi akan memuatnya otomatis saat diperlukan.
 
 ### Error "Failed to initialize Supabase"
 - Cek console browser untuk detail error
@@ -289,6 +288,8 @@ Untuk deployment ke production:
 2. Jangan hardcode kredensial di config.js
 3. Pastikan HTTPS di-enable (required untuk Supabase)
 4. Pertimbangkan untuk menggunakan service role key hanya di server-side
+
+Untuk deployment Vercel yang dipakai pengguna umum, nonaktifkan Deployment Protection/SSO pada deployment tersebut atau gunakan domain yang tidak diproteksi. Jika perlindungan aktif, Vercel mengalihkan `manifest.json` dan `/api/config` ke halaman SSO; browser akan menampilkan error CORS dan aplikasi tidak dapat mengambil konfigurasi Supabase.
 
 ## Fitur Tambahan yang Ditambahkan
 

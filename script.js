@@ -1,203 +1,435 @@
-const $=id=>document.getElementById(id);
-const KEY="kopiTutugDataV2";
-const today=()=>new Date().toISOString().slice(0,10);
-const rupiah=n=>new Intl.NumberFormat("id-ID",{style:"currency",currency:"IDR",maximumFractionDigits:0}).format(Number(n)||0);
-const uniqueId=()=>crypto.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const $ = function(id) { return document.getElementById(id); };
+const KEY = "kopiTutugDataV2";
+const today = function() { return new Date().toISOString().slice(0, 10); };
+const rupiah = function(n) {
+  return new Intl.NumberFormat("id-ID", {
+    style: "currency",
+    currency: "IDR",
+    maximumFractionDigits: 0
+  }).format(Number(n) || 0);
+};
+const uniqueId = function() {
+  return crypto.randomUUID ? crypto.randomUUID() : Date.now() + "-" + Math.random().toString(36).slice(2);
+};
 
-// Supabase Configuration (REST API - no SDK needed)
-let supabaseUrl = '';
-let supabaseKey = '';
-let useSupabase = false;
-let currentUser = null;
-let userRole = 'user';
+var MSG = {
+  errorGeneric: "Terjadi kesalahan. Coba lagi.",
+  errorNetwork: "Gagal menghubungi server. Periksa koneksi internet.",
+  errorInvalidLogin: "Email atau password salah.",
+  errorEmailNotConfirmed: "Email belum diverifikasi. Cek email Anda untuk tautan verifikasi.",
+  errorAlreadyRegistered: "Email sudah terdaftar. Silakan login.",
+  errorRateLimit: "Terlalu banyak percobaan. Tunggu beberapa saat.",
+  errorWeakPassword: "Password terlalu lemah. Minimal 6 karakter.",
+  errorSupabaseNotConfigured: "Supabase belum dikonfigurasi. Periksa environment variables di Vercel.",
+  errorRequiredFields: "Email dan password wajib diisi.",
+  errorRequiredRegisterFields: "Email, password, dan konfirmasi password wajib diisi.",
+  errorPasswordMinLength: "Password minimal 6 karakter.",
+  errorPasswordMismatch: "Konfirmasi password tidak cocok.",
+  errorPinRequired: "PIN wajib diisi.",
+  errorPinInvalid: "PIN salah.",
+  successLogin: "Login berhasil.",
+  successRegister: "Registrasi berhasil! Cek email Anda untuk verifikasi sebelum login.",
+  successRegisterAutoLogin: "Registrasi berhasil! Anda sudah login.",
+  successSync: "Data berhasil disinkronisasi dari cloud.",
+  successSyncPartial: "Login berhasil, tetapi sinkronisasi data gagal.",
+  successResendVerification: "Email verifikasi berhasil dikirim ulang. Cek inbox email Anda."
+};
 
-// Fetch Supabase config from Vercel API endpoint
+var supabaseUrl = "";
+var supabaseKey = "";
+var useSupabase = false;
+var currentUser = null;
+var userRole = "user";
+var cachedUsers = [];
+
+function hasValidSupabaseConfig(config) {
+  return !!(
+    config &&
+    config.SUPABASE_URL &&
+    config.SUPABASE_ANON_KEY &&
+    config.SUPABASE_URL.indexOf("supabase.co") !== -1 &&
+    config.SUPABASE_ANON_KEY.indexOf("your-anon-key") === -1
+  );
+}
+
 async function fetchSupabaseConfig() {
   try {
-    const res = await fetch('/api/config');
-    if (!res.ok) throw new Error('Failed to fetch config');
-    const config = await res.json();
-    return config;
+    var res = await fetch("/api/config");
+    if (res.ok) {
+      var apiConfig = await res.json();
+      if (hasValidSupabaseConfig(apiConfig)) {
+        return apiConfig;
+      }
+    }
   } catch (error) {
-    console.error('Failed to fetch config from API:', error);
-    return { SUPABASE_URL: '', SUPABASE_ANON_KEY: '' };
+    console.warn("Unable to load Supabase config from /api/config:", error);
   }
+
+  if (typeof window !== "undefined" && hasValidSupabaseConfig(window)) {
+    return {
+      SUPABASE_URL: window.SUPABASE_URL,
+      SUPABASE_ANON_KEY: window.SUPABASE_ANON_KEY
+    };
+  }
+
+  return { SUPABASE_URL: "", SUPABASE_ANON_KEY: "" };
 }
 
-// Initialize Supabase using REST API
+function loadOptionalLocalConfig() {
+  return new Promise(function(resolve) {
+    if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY) {
+      resolve();
+      return;
+    }
+
+    var script = document.createElement("script");
+    script.src = "config.js";
+    script.onload = resolve;
+    script.onerror = resolve;
+    document.head.appendChild(script);
+  });
+}
+
 async function initSupabase() {
-  const config = await fetchSupabaseConfig();
-  if (config.SUPABASE_URL && config.SUPABASE_ANON_KEY &&
-      config.SUPABASE_URL.includes('supabase.co') &&
-      !config.SUPABASE_ANON_KEY.includes('your-anon-key')) {
-    supabaseUrl = config.SUPABASE_URL;
+  var config = await fetchSupabaseConfig();
+  // Vercel provides config through /api/config. Only try the local, ignored
+  // config.js fallback when that endpoint is unavailable (for static local use).
+  if (!hasValidSupabaseConfig(config)) {
+    await loadOptionalLocalConfig();
+    config = await fetchSupabaseConfig();
+  }
+  if (hasValidSupabaseConfig(config)) {
+    supabaseUrl = config.SUPABASE_URL.replace(/\/$/, "");
     supabaseKey = config.SUPABASE_ANON_KEY;
     useSupabase = true;
-    console.log('Supabase initialized successfully');
-  } else {
-    console.log('Supabase credentials not configured, using local storage only');
+    console.log("Supabase initialized");
+    return;
+  }
+  console.log("Supabase not configured, using local storage mode");
+}
+
+function extractErrorPayload(source) {
+  if (!source) return null;
+
+  if (typeof source === "string") {
+    try {
+      return JSON.parse(source);
+    } catch (error) {
+      return { message: source };
+    }
+  }
+
+  if (source.details && typeof source.details === "object") {
+    return source.details;
+  }
+
+  if (source.message && typeof source.message === "string") {
+    try {
+      var parsed = JSON.parse(source.message);
+      if (parsed && typeof parsed === "object") return parsed;
+    } catch (error) {
+      return { message: source.message };
+    }
+  }
+
+  if (typeof source === "object") return source;
+  return null;
+}
+
+function parseSupabaseError(source) {
+  var payload = extractErrorPayload(source);
+  if (!payload) return MSG.errorGeneric;
+
+  var combined = [
+    payload.msg,
+    payload.message,
+    payload.error_description,
+    payload.error,
+    payload.hint,
+    payload.code
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  if (
+    combined.indexOf("invalid login") !== -1 ||
+    combined.indexOf("invalid credentials") !== -1 ||
+    combined.indexOf("invalid_grant") !== -1 ||
+    payload.error_code === "invalid_credentials"
+  ) {
+    return MSG.errorInvalidLogin;
+  }
+
+  if (
+    combined.indexOf("email not confirmed") !== -1 ||
+    combined.indexOf("not confirmed") !== -1 ||
+    payload.error_code === "email_not_confirmed"
+  ) {
+    return MSG.errorEmailNotConfirmed;
+  }
+
+  if (
+    combined.indexOf("already registered") !== -1 ||
+    combined.indexOf("user already registered") !== -1 ||
+    payload.error_code === "user_already_exists"
+  ) {
+    return MSG.errorAlreadyRegistered;
+  }
+
+  if (combined.indexOf("rate limit") !== -1 || payload.error_code === "over_request_rate_limit") {
+    return MSG.errorRateLimit;
+  }
+
+  if (
+    combined.indexOf("weak password") !== -1 ||
+    combined.indexOf("password should") !== -1 ||
+    (combined.indexOf("password") !== -1 && (combined.indexOf("minimum") !== -1 || combined.indexOf("mínimo") !== -1 || combined.indexOf("character") !== -1 || combined.indexOf("caracter") !== -1)) ||
+    payload.error_code === "weak_password"
+  ) {
+    return MSG.errorWeakPassword;
+  }
+
+  if (combined.indexOf("request failed") !== -1 || combined.indexOf("network") !== -1) {
+    return MSG.errorNetwork;
+  }
+
+  // Do not display raw provider messages. Supabase may return them in a
+  // different language, while the application interface is Indonesian.
+  return MSG.errorGeneric;
+}
+
+function parseResponseBody(text) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    return { message: text };
   }
 }
 
-// Supabase REST API helper functions
-async function supabaseFetch(path, options = {}) {
-  const res = await fetch(`${supabaseUrl}${path}`, {
-    ...options,
-    headers: {
-      'apikey': supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`,
-      'Content-Type': 'application/json',
-      ...(options.headers || {})
-    }
+async function supabaseFetch(path, options) {
+  if (!options) options = {};
+
+  var headers = Object.assign({
+    apikey: supabaseKey,
+    Authorization: "Bearer " + supabaseKey,
+    "Content-Type": "application/json"
+  }, options.headers || {});
+
+  if (options.accessToken) {
+    headers.Authorization = "Bearer " + options.accessToken;
+  }
+
+  var res = await fetch(supabaseUrl + path, {
+    method: options.method || "GET",
+    headers: headers,
+    body: options.body || undefined
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message || data.error_description || 'API error');
+
+  var text = await res.text();
+  var data = parseResponseBody(text);
+
+  if (!res.ok) {
+    var authError = new Error(parseSupabaseError(data));
+    authError.details = data;
+    authError.status = res.status;
+    throw authError;
+  }
+
   return data;
 }
 
-// Auth functions using Supabase REST API
 async function supabaseSignUp(email, password) {
-  return supabaseFetch('/auth/v1/signup', {
-    method: 'POST',
-    body: JSON.stringify({ email, password })
+  return supabaseFetch("/auth/v1/signup", {
+    method: "POST",
+    body: JSON.stringify({
+      email: email.trim().toLowerCase(),
+      password: password
+    })
   });
 }
 
 async function supabaseSignIn(email, password) {
-  return supabaseFetch('/auth/v1/token?grant_type=password', {
-    method: 'POST',
-    body: JSON.stringify({ email, password })
+  return supabaseFetch("/auth/v1/token?grant_type=password", {
+    method: "POST",
+    body: JSON.stringify({
+      email: email.trim().toLowerCase(),
+      password: password
+    })
   });
 }
 
 async function supabaseGetUser() {
-  const accessToken = sessionStorage.getItem('supabaseAccessToken');
+  var accessToken = sessionStorage.getItem('supabaseAccessToken');
   if (!accessToken) return null;
   try {
-    const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    var res = await fetch(supabaseUrl + '/auth/v1/user', {
       headers: {
         'apikey': supabaseKey,
-        'Authorization': `Bearer ${accessToken}`
+        'Authorization': 'Bearer ' + accessToken
       }
     });
     if (!res.ok) return null;
     return await res.json();
-  } catch {
+  } catch (e) {
     return null;
   }
 }
 
 async function supabaseSignOut() {
-  const accessToken = sessionStorage.getItem('supabaseAccessToken');
-  if (accessToken) {
-    await supabaseFetch('/auth/v1/logout', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${accessToken}` }
+  var accessToken = sessionStorage.getItem("supabaseAccessToken");
+  if (!accessToken) return;
+
+  try {
+    await supabaseFetch("/auth/v1/logout", {
+      method: "POST",
+      accessToken: accessToken
     });
+  } catch (error) {
+    console.warn("Supabase logout failed:", error);
   }
 }
 
 async function supabaseResendVerification(email) {
-  return supabaseFetch('/auth/v1/resend', {
-    method: 'POST',
-    body: JSON.stringify({ type: 'signup', email })
+  return supabaseFetch("/auth/v1/resend", {
+    method: "POST",
+    body: JSON.stringify({
+      type: "signup",
+      email: email.trim().toLowerCase()
+    })
   });
 }
 
-// Data operations
-async function supabaseSelect(table, accessToken) {
-  return supabaseFetch(`/rest/v1/${table}?select=*`, {
-    headers: { 'Authorization': `Bearer ${accessToken}` }
+async function supabaseSelect(table, accessToken, query) {
+  return supabaseFetch("/rest/v1/" + table + "?select=*" + (query ? "&" + query : ""), {
+    accessToken: accessToken
   });
 }
 
 async function supabaseUpsert(table, data, accessToken) {
-  return supabaseFetch(`/rest/v1/${table}?on_conflict=id`, {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${accessToken}`, 'Prefer': 'resolution=merge-duplicates' },
+  return supabaseFetch("/rest/v1/" + table + "?on_conflict=id", {
+    method: "POST",
+    accessToken: accessToken,
+    headers: { Prefer: "resolution=merge-duplicates" },
     body: JSON.stringify(data)
   });
 }
 
 async function supabaseDelete(table, id, accessToken) {
-  return supabaseFetch(`/rest/v1/${table}?id=eq.${id}`, {
-    method: 'DELETE',
-    headers: { 'Authorization': `Bearer ${accessToken}` }
+  return supabaseFetch("/rest/v1/" + table + "?id=eq." + encodeURIComponent(id), {
+    method: "DELETE",
+    accessToken: accessToken
   });
 }
 
 async function supabaseUpdate(table, id, data, accessToken) {
-  return supabaseFetch(`/rest/v1/${table}?id=eq.${id}`, {
-    method: 'PATCH',
-    headers: { 'Authorization': `Bearer ${accessToken}` },
+  return supabaseFetch("/rest/v1/" + table + "?id=eq." + id, {
+    method: "PATCH",
+    accessToken: accessToken,
     body: JSON.stringify(data)
   });
 }
 
-let db=JSON.parse(localStorage.getItem(KEY)||"null");
-if(!db){
-  const oldSales=JSON.parse(localStorage.getItem("dataPenjualan")||"[]");
-  const products=[];
-  oldSales.forEach(s=>{
-    if(!products.some(p=>p.name===s.barang)){
-      products.push({id:uniqueId(),name:s.barang,cost:0,price:Number(s.harga)||0,stock:0});
+var db = JSON.parse(localStorage.getItem(KEY) || "null");
+if (!db) {
+  var oldSales = JSON.parse(localStorage.getItem("dataPenjualan") || "[]");
+  var products = [];
+  oldSales.forEach(function(s) {
+    if (!products.some(function(p) { return p.name === s.barang; })) {
+      products.push({ id: uniqueId(), name: s.barang, cost: 0, price: Number(s.harga) || 0, stock: 0 });
     }
   });
-  db={pin:"1234",products,sales:oldSales.map(s=>{
-    const p=products.find(p=>p.name===s.barang);
-    const price=Number(s.harga)||0,qty=Number(s.jumlah)||0;
-    return {id:uniqueId(),date:s.tanggal,productId:p?.id,product:s.barang,price,qty,cost:0,total:Number(s.total)||price*qty,profit:price*qty};
-  })};
-  localStorage.setItem(KEY,JSON.stringify(db));
+  db = {
+    pin: "1234",
+    products: products,
+    sales: oldSales.map(function(s) {
+      var p = products.find(function(p) { return p.name === s.barang; });
+      var price = Number(s.harga) || 0, qty = Number(s.jumlah) || 0;
+      return {
+        id: uniqueId(),
+        date: s.tanggal,
+        productId: p ? p.id : null,
+        product: s.barang,
+        price: price,
+        qty: qty,
+        cost: 0,
+        total: Number(s.total) || price * qty,
+        profit: price * qty
+      };
+    })
+  };
+  localStorage.setItem(KEY, JSON.stringify(db));
 }
-function save(){localStorage.setItem(KEY,JSON.stringify(db)); syncToSupabase()}
 
-// Sync data to Supabase
+if (!db.pin) db.pin = "1234";
+
+function saveLocal() {
+  localStorage.setItem(KEY, JSON.stringify(db));
+}
+
+function save() {
+  saveLocal();
+  void syncToSupabase();
+}
+
 async function syncToSupabase() {
   if (!useSupabase) return;
-  const accessToken = sessionStorage.getItem('supabaseAccessToken');
+  var accessToken = sessionStorage.getItem('supabaseAccessToken');
   if (!accessToken) return;
+  if (!currentUser || !currentUser.id) return;
 
   try {
+    var userId = currentUser.id;
+    var remoteProducts = await supabaseSelect('products', accessToken, 'user_id=eq.' + encodeURIComponent(userId));
+    var remoteSales = await supabaseSelect('sales', accessToken, 'user_id=eq.' + encodeURIComponent(userId));
     if (db.products.length > 0) {
-      await supabaseUpsert('products', db.products.map(p => ({
-        id: p.id, name: p.name, cost: p.cost, price: p.price, stock: p.stock, user_id: currentUser?.id
-      })), accessToken);
+      await supabaseUpsert('products', db.products.map(function(p) {
+        return { id: p.id, name: p.name, cost: p.cost, price: p.price, stock: p.stock, user_id: userId };
+      }), accessToken);
     }
     if (db.sales.length > 0) {
-      await supabaseUpsert('sales', db.sales.map(s => ({
-        id: s.id, date: s.date, product_id: s.productId, product: s.product,
-        price: s.price, qty: s.qty, cost: s.cost, total: s.total, profit: s.profit, user_id: currentUser?.id
-      })), accessToken);
+      await supabaseUpsert('sales', db.sales.map(function(s) {
+        return {
+          id: s.id, date: s.date, product_id: s.productId, product: s.product,
+          price: s.price, qty: s.qty, cost: s.cost, total: s.total, profit: s.profit, user_id: userId
+        };
+      }), accessToken);
     }
-    console.log('Data synced to Supabase');
+    await Promise.all((remoteProducts || [])
+      .filter(function(product) { return !db.products.some(function(localProduct) { return localProduct.id === product.id; }); })
+      .map(function(product) { return supabaseDelete('products', product.id, accessToken); }));
+    await Promise.all((remoteSales || [])
+      .filter(function(sale) { return !db.sales.some(function(localSale) { return localSale.id === sale.id; }); })
+      .map(function(sale) { return supabaseDelete('sales', sale.id, accessToken); }));
   } catch (error) {
     console.error('Sync error:', error);
   }
 }
 
-// Sync data from Supabase
 async function syncFromSupabase() {
   if (!useSupabase) return false;
-  const accessToken = sessionStorage.getItem('supabaseAccessToken');
-  if (!accessToken) return false;
+  var accessToken = sessionStorage.getItem('supabaseAccessToken');
+  if (!accessToken || !currentUser || !currentUser.id) return false;
 
   try {
-    const products = await supabaseSelect('products', accessToken);
-    const sales = await supabaseSelect('sales', accessToken);
+    await fetchUserRole(currentUser.id);
 
-    if (products && products.length > 0) {
-      db.products = products.map(p => ({
-        id: p.id, name: p.name, cost: p.cost, price: p.price, stock: p.stock
-      }));
+    var userFilter = 'user_id=eq.' + encodeURIComponent(currentUser.id);
+    var products = await supabaseSelect('products', accessToken, userFilter);
+    var sales = await supabaseSelect('sales', accessToken, userFilter);
+
+    if (Array.isArray(products)) {
+      db.products = products.map(function(p) {
+        return { id: p.id, name: p.name, cost: p.cost, price: p.price, stock: p.stock };
+      });
     }
-    if (sales && sales.length > 0) {
-      db.sales = sales.map(s => ({
-        id: s.id, date: s.date, productId: s.product_id, product: s.product,
-        price: s.price, qty: s.qty, cost: s.cost, total: s.total, profit: s.profit
-      }));
+    if (Array.isArray(sales)) {
+      db.sales = sales.map(function(s) {
+        return {
+          id: s.id, date: s.date, productId: s.product_id, product: s.product,
+          price: s.price, qty: s.qty, cost: s.cost, total: s.total, profit: s.profit
+        };
+      });
     }
-    save();
+    saveLocal();
     console.log('Data synced from Supabase');
     return true;
   } catch (error) {
@@ -206,17 +438,16 @@ async function syncFromSupabase() {
   }
 }
 
-// Role Management
 async function fetchUserRole(userId) {
   if (!useSupabase) return;
-  const accessToken = sessionStorage.getItem('supabaseAccessToken');
+  var accessToken = sessionStorage.getItem("supabaseAccessToken");
   if (!accessToken) return;
 
   try {
-    const data = await supabaseFetch(`/rest/v1/user_roles?user_id=eq.${userId}&select=role`, {
-      headers: { 'Authorization': `Bearer ${accessToken}` }
+    var data = await supabaseFetch("/rest/v1/user_roles?user_id=eq." + userId + "&select=role", {
+      accessToken: accessToken
     });
-    userRole = data[0]?.role || 'user';
+    userRole = (data[0] && data[0].role) || 'user';
     console.log('User role:', userRole);
   } catch (error) {
     console.error('Error fetching user role:', error);
@@ -234,13 +465,13 @@ function isSuperAdmin() {
 
 async function loadUsers() {
   if (!useSupabase || !isAdmin()) return;
-  const accessToken = sessionStorage.getItem('supabaseAccessToken');
+  var accessToken = sessionStorage.getItem('supabaseAccessToken');
   if (!accessToken) return;
 
   try {
-    const users = await supabaseSelect('user_roles', accessToken);
-    renderUsersTable(users || []);
-    updateUserStats(users || []);
+    cachedUsers = await supabaseSelect('user_roles', accessToken) || [];
+    renderUsersTable(cachedUsers);
+    updateUserStats(cachedUsers);
   } catch (error) {
     console.error('Error loading users:', error);
     toast('Gagal memuat daftar user');
@@ -248,33 +479,29 @@ async function loadUsers() {
 }
 
 function renderUsersTable(users) {
-  if(!$("usersTable") || !$("userSearch")) return;
+  if (!$("usersTable") || !$("userSearch")) return;
 
-  const search = $("userSearch").value.toLowerCase();
-  const filtered = users.filter(u => u.email.toLowerCase().includes(search));
+  var search = $("userSearch").value.toLowerCase();
+  var filtered = users.filter(function(u) { return (u.email || '').toLowerCase().indexOf(search) !== -1; });
 
-  $("usersTable").innerHTML = filtered.map(u => `
-    <tr>
-      <td>${esc(u.email)}</td>
-      <td>
-        <select onchange="changeUserRole('${u.id}', this.value)" ${!isSuperAdmin() && u.role === 'super_admin' ? 'disabled' : ''}>
-          <option value="user" ${u.role === 'user' ? 'selected' : ''}>User</option>
-          <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>Admin</option>
-          <option value="super_admin" ${u.role === 'super_admin' ? 'selected' : ''} ${!isSuperAdmin() ? 'disabled' : ''}>Super Admin</option>
-        </select>
-      </td>
-      <td>${new Date(u.created_at).toLocaleDateString('id-ID')}</td>
-      <td>
-        ${isSuperAdmin() ? `<button class="mini del" onclick="deleteUser('${u.id}')">Hapus</button>` : ''}
-      </td>
-    </tr>
-  `).join('') || '<tr><td colspan="4">Tidak ada user.</td></tr>';
+  $("usersTable").innerHTML = filtered.map(function(u) {
+    return '<tr>' +
+      '<td>' + esc(u.email) + '</td>' +
+      '<td><select onchange="changeUserRole(\'' + u.id + '\', this.value)" ' + (!isSuperAdmin() && u.role === 'super_admin' ? 'disabled' : '') + '>' +
+        '<option value="user" ' + (u.role === 'user' ? 'selected' : '') + '>User</option>' +
+        '<option value="admin" ' + (u.role === 'admin' ? 'selected' : '') + '>Admin</option>' +
+        '<option value="super_admin" ' + (u.role === 'super_admin' ? 'selected' : '') + ' ' + (!isSuperAdmin() ? 'disabled' : '') + '>Super Admin</option>' +
+      '</select></td>' +
+      '<td>' + new Date(u.created_at).toLocaleDateString('id-ID') + '</td>' +
+      '<td>' + (isSuperAdmin() ? '<button class="mini del" onclick="deleteUser(\'' + u.id + '\')">Hapus</button>' : '') + '</td>' +
+    '</tr>';
+  }).join('') || '<tr><td colspan="4">Tidak ada user.</td></tr>';
 }
 
 function updateUserStats(users) {
-  if($("totalUsers")) $("totalUsers").textContent = users.length;
-  if($("totalAdmins")) $("totalAdmins").textContent = users.filter(u => u.role === 'admin' || u.role === 'super_admin').length;
-  if($("totalRegularUsers")) $("totalRegularUsers").textContent = users.filter(u => u.role === 'user').length;
+  if ($("totalUsers")) $("totalUsers").textContent = users.length;
+  if ($("totalAdmins")) $("totalAdmins").textContent = users.filter(function(u) { return u.role === 'admin' || u.role === 'super_admin'; }).length;
+  if ($("totalRegularUsers")) $("totalRegularUsers").textContent = users.filter(function(u) { return u.role === 'user'; }).length;
 }
 
 async function changeUserRole(userId, newRole) {
@@ -282,108 +509,166 @@ async function changeUserRole(userId, newRole) {
     toast('Hanya super admin yang bisa mengubah role');
     return;
   }
-  const accessToken = sessionStorage.getItem('supabaseAccessToken');
+  var accessToken = sessionStorage.getItem('supabaseAccessToken');
   if (!accessToken) return;
 
   try {
     await supabaseUpdate('user_roles', userId, { role: newRole }, accessToken);
-    toast('Role berhasil diubah');
+    toast('Role pengguna berhasil diubah');
     loadUsers();
   } catch (error) {
     console.error('Error changing user role:', error);
-    toast('Gagal mengubah role');
+    toast('Gagal mengubah role pengguna');
   }
 }
 
 async function deleteUser(userId) {
-  if (!confirm('Hapus user ini? Data user akan dihapus permanen.')) return;
+  if (!confirm('Hapus pengguna ini?')) return;
   if (!useSupabase || !isSuperAdmin()) {
-    toast('Hanya super admin yang bisa menghapus user');
+    toast('Hanya super admin yang bisa menghapus pengguna');
     return;
   }
-  const accessToken = sessionStorage.getItem('supabaseAccessToken');
+  var accessToken = sessionStorage.getItem('supabaseAccessToken');
   if (!accessToken) return;
 
   try {
     await supabaseDelete('user_roles', userId, accessToken);
-    toast('User role dihapus. Hapus auth user melalui dashboard Supabase.');
+    toast('Role pengguna dihapus. Hapus akun dari dashboard Supabase.');
     loadUsers();
   } catch (error) {
     console.error('Error deleting user:', error);
-    toast('Gagal menghapus user');
+    toast('Gagal menghapus pengguna');
   }
 }
-function toast(t){$("toast").textContent=t;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),2200)}
-function logged(){return sessionStorage.getItem("adminLogin")==="1"}
-function boot(){
- initSupabase().then(() => {
-   // Check for existing session
-   if (useSupabase) {
-     supabaseGetUser().then(user => {
-       if (user) {
-         currentUser = user;
-         sessionStorage.setItem("adminLogin","1");
-         sessionStorage.setItem("supabaseUser", JSON.stringify(user));
-         fetchUserRole(user.id).then(() => showApp());
-       }
-     });
-   }
- });
 
- // Check if already logged in
- if(logged()) showApp();
+function toast(t) {
+  if (!$("toast")) return;
+  $("toast").textContent = t;
+  $("toast").classList.add("show");
+  setTimeout(function() { $("toast").classList.remove("show"); }, 2200);
+}
 
- // Main app handlers
- if($("logoutBtn")) $("logoutBtn").onclick=handleSupabaseLogout;
- if($("menuBtn")) $("menuBtn").onclick=()=>$("sideNav").classList.toggle("open");
+function logged() {
+  return sessionStorage.getItem("adminLogin") === "1";
+}
 
- // Navigation handlers
- document.querySelectorAll(".nav-btn[data-page]").forEach(b=>b.onclick=()=>showPage(b.dataset.page));
+function updateLoginMode() {
+  var localForm = $("localLoginForm");
+  var loginTabs = document.querySelector(".login-tabs");
+  var loginForm = $("loginForm");
+  var registerForm = $("registerForm");
+  if (!localForm || !loginTabs || !loginForm || !registerForm) return;
 
- // Date inputs
- if($("dashDate")) $("dashDate").value=today();
- if($("saleDate")) $("saleDate").value=today();
- if($("reportFrom")) $("reportFrom").value=today();
- if($("reportTo")) $("reportTo").value=today();
+  if (useSupabase) {
+    localForm.classList.add("hidden");
+    loginTabs.classList.remove("hidden");
+    loginForm.classList.remove("hidden");
+  } else {
+    localForm.classList.remove("hidden");
+    loginTabs.classList.add("hidden");
+    loginForm.classList.add("hidden");
+    registerForm.classList.add("hidden");
+    if ($("resendVerificationBtn")) $("resendVerificationBtn").classList.add("hidden");
+  }
+}
 
- // Sales handlers
- if($("saleProduct")) $("saleProduct").onchange=syncSalePrice;
- if($("salePrice")) $("salePrice").oninput=calcSaleTotal;
- if($("saleQty")) $("saleQty").oninput=calcSaleTotal;
- if($("addSaleBtn")) $("addSaleBtn").onclick=addSale;
- if($("saleSearch")) $("saleSearch").oninput=renderSales;
+async function restoreSession() {
+  if (useSupabase) {
+    var accessToken = sessionStorage.getItem('supabaseAccessToken');
+    if (!accessToken || !logged()) return false;
 
- // Product handlers
- if($("addProductBtn")) $("addProductBtn").onclick=addProduct;
+    var user = await supabaseGetUser();
+    if (!user) {
+      sessionStorage.removeItem("adminLogin");
+      sessionStorage.removeItem("supabaseAccessToken");
+      sessionStorage.removeItem("supabaseUser");
+      return false;
+    }
 
- // Report handlers
- if($("reportBtn")) $("reportBtn").onclick=renderReport;
- if($("exportCsvBtn")) $("exportCsvBtn").onclick=exportCSV;
- if($("printReportBtn")) $("printReportBtn").onclick=printReport;
+    currentUser = user;
+    sessionStorage.setItem("supabaseUser", JSON.stringify(user));
+    await fetchUserRole(user.id);
+    showApp();
+    await syncFromSupabase();
+    renderAll();
+    return true;
+  }
 
- // Backup handlers
- if($("backupBtn")) $("backupBtn").onclick=backup;
- if($("restoreBtn")) $("restoreBtn").onclick=restore;
+  if (logged()) {
+    showApp();
+    return true;
+  }
 
- // Settings handlers
- if($("changePinBtn")) $("changePinBtn").onclick=changePin;
- if($("clearBtn")) $("clearBtn").onclick=clearData;
- if($("dashDate")) $("dashDate").onchange=renderDashboard;
+  return false;
+}
 
- // Login tabs functionality
- if($("loginTab")) $("loginTab").onclick=()=>showLoginTab("login");
- if($("registerTab")) $("registerTab").onclick=()=>showLoginTab("register");
- if($("emailLoginBtn")) $("emailLoginBtn").onclick=handleEmailLogin;
- if($("registerBtn")) $("registerBtn").onclick=handleEmailRegister;
- if($("resendVerificationBtn")) $("resendVerificationBtn").onclick=handleResendVerification;
+function boot() {
+  initSupabase().then(function() {
+    updateLoginMode();
+    return restoreSession();
+  }).catch(function(error) {
+    console.error('Boot error:', error);
+    updateLoginMode();
+  });
 
- // Admin dashboard functionality
- if($("userSearch")) $("userSearch").oninput=loadUsers;
- if($("refreshUsersBtn")) $("refreshUsersBtn").onclick=loadUsers;
+  // Main app handlers
+  if ($("logoutBtn")) $("logoutBtn").onclick = handleSupabaseLogout;
+  if ($("menuBtn")) $("menuBtn").onclick = function() { $("sideNav").classList.toggle("open"); };
+
+  // Navigation handlers
+  var navBtns = document.querySelectorAll(".nav-btn[data-page]");
+  for (var i = 0; i < navBtns.length; i++) {
+    navBtns[i].onclick = (function(btn) { return function() { showPage(btn.dataset.page); }; })(navBtns[i]);
+  }
+
+  // Date inputs
+  if ($("dashDate")) $("dashDate").value = today();
+  if ($("saleDate")) $("saleDate").value = today();
+  if ($("reportFrom")) $("reportFrom").value = today();
+  if ($("reportTo")) $("reportTo").value = today();
+
+  // Sales handlers
+  if ($("saleProduct")) $("saleProduct").onchange = syncSalePrice;
+  if ($("salePrice")) $("salePrice").oninput = calcSaleTotal;
+  if ($("saleQty")) $("saleQty").oninput = calcSaleTotal;
+  if ($("addSaleBtn")) $("addSaleBtn").onclick = addSale;
+  if ($("saleSearch")) $("saleSearch").oninput = renderSales;
+
+  // Product handlers
+  if ($("addProductBtn")) $("addProductBtn").onclick = addProduct;
+
+  // Report handlers
+  if ($("reportBtn")) $("reportBtn").onclick = renderReport;
+  if ($("exportCsvBtn")) $("exportCsvBtn").onclick = exportCSV;
+  if ($("printReportBtn")) $("printReportBtn").onclick = printReport;
+
+  // Backup handlers
+  if ($("backupBtn")) $("backupBtn").onclick = backup;
+  if ($("restoreBtn")) $("restoreBtn").onclick = restore;
+
+  // Settings handlers
+  if ($("changePinBtn")) $("changePinBtn").onclick = changePin;
+  if ($("clearBtn")) $("clearBtn").onclick = clearData;
+  if ($("dashDate")) $("dashDate").onchange = renderDashboard;
+
+  // Login tabs
+  if ($("loginTab")) $("loginTab").onclick = function() { showLoginTab("login"); };
+  if ($("registerTab")) $("registerTab").onclick = function() { showLoginTab("register"); };
+  if ($("emailLoginBtn")) $("emailLoginBtn").onclick = handleEmailLogin;
+  if ($("registerBtn")) $("registerBtn").onclick = handleEmailRegister;
+  if ($("resendVerificationBtn")) $("resendVerificationBtn").onclick = handleResendVerification;
+  if ($("pinLoginBtn")) $("pinLoginBtn").onclick = handlePinLogin;
+  if ($("pinInput")) $("pinInput").addEventListener("keydown", function(e) {
+    if (e.key === "Enter") handlePinLogin();
+  });
+
+  // Admin dashboard
+  if ($("userSearch")) $("userSearch").oninput = function() { renderUsersTable(cachedUsers); };
+  if ($("refreshUsersBtn")) $("refreshUsersBtn").onclick = loadUsers;
 }
 
 function showLoginTab(tab) {
-  if(!$("loginTab") || !$("registerTab") || !$("loginForm") || !$("registerForm")) return;
+  if (!$("loginTab") || !$("registerTab") || !$("loginForm") || !$("registerForm")) return;
 
   if (tab === "login") {
     $("loginTab").classList.add("active");
@@ -396,147 +681,165 @@ function showLoginTab(tab) {
     $("registerForm").classList.remove("hidden");
     $("loginForm").classList.add("hidden");
   }
-  if($("resendVerificationBtn")) $("resendVerificationBtn").classList.add("hidden");
+  if ($("resendVerificationBtn")) $("resendVerificationBtn").classList.add("hidden");
+}
+
+function handlePinLogin() {
+  if (!$("pinInput") || !$("loginMsg")) return;
+
+  var pin = $("pinInput").value.trim();
+  if (!pin) {
+    $("loginMsg").textContent = MSG.errorPinRequired;
+    toast(MSG.errorPinRequired);
+    return;
+  }
+
+  if (pin !== db.pin) {
+    $("loginMsg").textContent = MSG.errorPinInvalid;
+    toast(MSG.errorPinInvalid);
+    return;
+  }
+
+  sessionStorage.setItem("adminLogin", "1");
+  $("loginMsg").textContent = "";
+  showApp();
+  toast(MSG.successLogin);
 }
 
 async function handleEmailLogin() {
-  if(!$("emailInput") || !$("passwordInput") || !$("loginMsg")) return;
+  if (!$("emailInput") || !$("passwordInput") || !$("loginMsg")) return;
 
-  const email = $("emailInput").value.trim();
-  const password = $("passwordInput").value;
+  var email = $("emailInput").value.trim();
+  var password = $("passwordInput").value;
 
   if (!email || !password) {
-    $("loginMsg").textContent = "⚠️ Email dan password wajib diisi.";
-    toast("Email dan password wajib diisi");
+    $("loginMsg").textContent = MSG.errorRequiredFields;
+    toast(MSG.errorRequiredFields);
     return;
   }
 
   if (!useSupabase) {
-    $("loginMsg").textContent = "⚠️ Supabase belum dikonfigurasi. Periksa env vars di Vercel.";
-    toast("Supabase belum dikonfigurasi");
+    $("loginMsg").textContent = MSG.errorSupabaseNotConfigured;
+    toast(MSG.errorSupabaseNotConfigured);
     return;
   }
 
   try {
-    const data = await supabaseSignIn(email, password);
+    var data = await supabaseSignIn(email, password);
 
-    // Check email verification
-    if (!data.user?.email_confirmed_at) {
-      $("loginMsg").textContent = "⚠️ Email belum diverifikasi. Silakan cek email Anda para link verifikasi.";
-      toast("Email belum diverifikasi. Cek email Anda.");
-      if($("resendVerificationBtn")) $("resendVerificationBtn").classList.remove("hidden");
+    if (!data.access_token || !data.user) {
+      $("loginMsg").textContent = MSG.errorGeneric;
+      toast(MSG.errorGeneric);
       return;
     }
 
-    // Set current user
+    if (!data.user.email_confirmed_at) {
+      $("loginMsg").textContent = MSG.errorEmailNotConfirmed;
+      toast(MSG.errorEmailNotConfirmed);
+      if ($("resendVerificationBtn")) $("resendVerificationBtn").classList.remove("hidden");
+      return;
+    }
+
     currentUser = data.user;
-    sessionStorage.setItem("adminLogin","1");
+    sessionStorage.setItem("adminLogin", "1");
     sessionStorage.setItem("supabaseUser", JSON.stringify(data.user));
     sessionStorage.setItem("supabaseAccessToken", data.access_token);
 
-    // Fetch user role
     await fetchUserRole(data.user.id);
-
     showApp();
 
-    // Sync data from Supabase after successful login
-    const synced = await syncFromSupabase();
+    var synced = await syncFromSupabase();
     if (synced) {
       renderAll();
-      toast("Data berhasil disinkronisasi dari cloud!");
+      toast(MSG.successSync);
     } else {
-      toast("Login berhasil, pero gagal sinkronisasi data.");
+      toast(MSG.successSyncPartial);
     }
-
   } catch (error) {
-    const msg = error.message?.includes('Invalid login credentials')
-      ? "Email o password incorrecto."
-      : error.message?.includes('Email not confirmed')
-      ? "Email belum diverificado. Cek email."
-      : error.message?.includes('rate limit')
-      ? "Demasiados intentos. Espera un momento."
-      : error.message || 'Error desconocido';
-    $("loginMsg").textContent = "⚠️ " + msg;
+    var msg = parseSupabaseError(error);
+    $("loginMsg").textContent = msg;
     toast(msg);
   }
 }
 
 async function handleEmailRegister() {
-  if(!$("registerEmailInput") || !$("registerPasswordInput") || !$("registerConfirmPasswordInput") || !$("loginMsg")) return;
+  if (!$("registerEmailInput") || !$("registerPasswordInput") || !$("registerConfirmPasswordInput") || !$("loginMsg")) return;
 
-  const email = $("registerEmailInput").value.trim();
-  const password = $("registerPasswordInput").value;
-  const confirmPassword = $("registerConfirmPasswordInput").value;
+  var email = $("registerEmailInput").value.trim();
+  var password = $("registerPasswordInput").value;
+  var confirmPassword = $("registerConfirmPasswordInput").value;
 
   if (!email || !password || !confirmPassword) {
-    $("loginMsg").textContent = "⚠️ Email, password, y confirmación de password son obligatorios.";
-    toast("Todos los campos son obligatorios");
+    $("loginMsg").textContent = MSG.errorRequiredRegisterFields;
+    toast(MSG.errorRequiredRegisterFields);
     return;
   }
 
   if (password.length < 6) {
-    $("loginMsg").textContent = "⚠️ Password mínimo 6 caracteres.";
-    toast("Password mínimo 6 caracteres");
+    $("loginMsg").textContent = MSG.errorPasswordMinLength;
+    toast(MSG.errorPasswordMinLength);
     return;
   }
 
   if (password !== confirmPassword) {
-    $("loginMsg").textContent = "⚠️ La confirmación de password no coincide.";
-    toast("La confirmación de password no coincide");
+    $("loginMsg").textContent = MSG.errorPasswordMismatch;
+    toast(MSG.errorPasswordMismatch);
     return;
   }
 
   if (!useSupabase) {
-    $("loginMsg").textContent = "⚠️ Supabase no está configurado. Revisa las env vars en Vercel.";
-    toast("Supabase no está configurado");
+    $("loginMsg").textContent = MSG.errorSupabaseNotConfigured;
+    toast(MSG.errorSupabaseNotConfigured);
     return;
   }
 
   try {
-    const data = await supabaseSignUp(email, password);
+    var data = await supabaseSignUp(email, password);
 
-    // Check if email confirmation is required
     if (data.user && !data.session) {
-      toast("¡Registro exitoso! Revisa tu email para verificar antes de iniciar sesión.");
-      if($("resendVerificationBtn")) $("resendVerificationBtn").classList.remove("hidden");
-    } else if (data.user && data.session) {
-      // Auto login if email confirmation is disabled
-      sessionStorage.setItem("adminLogin","1");
-      sessionStorage.setItem("supabaseUser", JSON.stringify(data.user));
-      sessionStorage.setItem("supabaseAccessToken", data.access_token);
-      showApp();
-      toast("¡Registro exitoso! Ya has iniciado sesión.");
+      toast(MSG.successRegister);
+      if ($("resendVerificationBtn")) $("resendVerificationBtn").classList.remove("hidden");
+      showLoginTab("login");
+      if ($("emailInput")) $("emailInput").value = email;
+      return;
     }
 
+    if (data.user && data.session) {
+      currentUser = data.user;
+      sessionStorage.setItem("adminLogin", "1");
+      sessionStorage.setItem("supabaseUser", JSON.stringify(data.user));
+      sessionStorage.setItem("supabaseAccessToken", data.session.access_token || data.access_token);
+      await fetchUserRole(data.user.id);
+      showApp();
+      await syncFromSupabase();
+      renderAll();
+      toast(MSG.successRegisterAutoLogin);
+    }
   } catch (error) {
-    const msg = error.message?.includes('already registered')
-      ? "Email ya registrado. Inicia sesión."
-      : error.message?.includes('rate limit')
-      ? "Demasiados intentos. Espera un momento."
-      : error.message || 'Error desconocido';
-    $("loginMsg").textContent = "⚠️ " + msg;
+    var msg = parseSupabaseError(error);
+    $("loginMsg").textContent = msg;
     toast(msg);
   }
 }
 
 async function handleResendVerification() {
-  if(!$("emailInput") || !$("loginMsg") || !$("resendVerificationBtn")) return;
+  if (!$("emailInput") || !$("loginMsg") || !$("resendVerificationBtn")) return;
 
-  const email = $("emailInput").value.trim();
+  var email = $("emailInput").value.trim();
 
   if (!email) {
-    $("loginMsg").textContent = "Ingresa tu email primero.";
+    $("loginMsg").textContent = "Masukkan email terlebih dahulu.";
     return;
   }
 
   if (!useSupabase) {
-    $("loginMsg").textContent = "Supabase no está configurado.";
+    $("loginMsg").textContent = "Supabase belum dikonfigurasi.";
     return;
   }
 
   try {
-    const originalText = $("resendVerificationBtn").textContent;
-    $("resendVerificationBtn").textContent = "Enviando...";
+    var originalText = $("resendVerificationBtn").textContent;
+    $("resendVerificationBtn").textContent = "Mengirim...";
     $("resendVerificationBtn").disabled = true;
 
     await supabaseResendVerification(email);
@@ -544,12 +847,11 @@ async function handleResendVerification() {
     $("resendVerificationBtn").textContent = originalText;
     $("resendVerificationBtn").disabled = false;
 
-    toast("¡Email de verificación reenviado! Revisa tu bandeja de entrada.");
+    toast(MSG.successResendVerification);
     $("loginMsg").textContent = "";
-
   } catch (error) {
-    $("loginMsg").textContent = "Error al reenviar email de verificación: " + (error.message || 'Error desconocido');
-    $("resendVerificationBtn").textContent = "📧 Reenviar Email de Verificación";
+    $("loginMsg").textContent = "Gagal mengirim email verifikasi: " + parseSupabaseError(error);
+    $("resendVerificationBtn").textContent = "Kirim Ulang Verifikasi Email";
     $("resendVerificationBtn").disabled = false;
   }
 }
@@ -565,35 +867,39 @@ async function handleSupabaseLogout() {
   userRole = 'user';
   location.reload();
 }
-function showApp(){
-  if($("loginScreen")) $("loginScreen").classList.add("hidden");
-  if($("app")) $("app").classList.remove("hidden");
 
-  const adminElements = document.querySelectorAll('.admin-only');
-  adminElements.forEach(el => {
+function showApp() {
+  if ($("loginScreen")) $("loginScreen").classList.add("hidden");
+  if ($("app")) $("app").classList.remove("hidden");
+
+  var adminElements = document.querySelectorAll('.admin-only');
+  for (var i = 0; i < adminElements.length; i++) {
     if (isAdmin()) {
-      el.classList.remove('hidden');
-      el.classList.add('visible');
+      adminElements[i].classList.remove('hidden');
+      adminElements[i].classList.add('visible');
     } else {
-      el.classList.add('hidden');
-      el.classList.remove('visible');
+      adminElements[i].classList.add('hidden');
+      adminElements[i].classList.remove('visible');
     }
-  });
+  }
 
-  if($("resendVerificationBtn")) $("resendVerificationBtn").classList.add("hidden");
-
+  if ($("resendVerificationBtn")) $("resendVerificationBtn").classList.add("hidden");
   renderAll();
 }
-function showPage(id){
+
+function showPage(id) {
   if (id === 'admin' && !isAdmin()) {
-    toast('Acceso denegado. Esta página es solo para administradores.');
+    toast('Akses ditolak. Halaman ini khusus admin.');
     return;
   }
 
-  document.querySelectorAll(".page").forEach(p=>p.classList.add("hidden"));
-  if($(id)) $(id).classList.remove("hidden");
-  document.querySelectorAll(".nav-btn[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===id));
-  if($("sideNav")) $("sideNav").classList.remove("open");
+  var pages = document.querySelectorAll(".page");
+  for (var i = 0; i < pages.length; i++) pages[i].classList.add("hidden");
+  if ($(id)) $(id).classList.remove("hidden");
+
+  var btns = document.querySelectorAll(".nav-btn[data-page]");
+  for (var i = 0; i < btns.length; i++) btns[i].classList.toggle("active", btns[i].dataset.page === id);
+  if ($("sideNav")) $("sideNav").classList.remove("open");
 
   if (id === 'admin') {
     loadUsers();
@@ -601,106 +907,234 @@ function showPage(id){
 
   renderAll();
 }
-function renderAll(){renderProducts();fillProductSelect();renderSales();renderDashboard();renderReport()}
-function addProduct(){
- if(!$("pName") || !$("pCost") || !$("pPrice") || !$("pStock")) return;
 
- const name=$("pName").value.trim(),cost=+$("pCost").value||0,price=+$("pPrice").value||0,stock=+$("pStock").value||0;
- if(!name)return toast("El nombre del producto es obligatorio.");
- db.products.push({id:uniqueId(),name,cost,price,stock});save();$("pName").value="";$("pCost").value="";$("pPrice").value="";$("pStock").value="";renderAll();toast("Producto agregado.")
+function renderAll() { renderProducts(); fillProductSelect(); renderSales(); renderDashboard(); renderReport(); }
+
+function addProduct() {
+  if (!$("pName") || !$("pCost") || !$("pPrice") || !$("pStock")) return;
+  var name = $("pName").value.trim(), cost = +$("pCost").value || 0, price = +$("pPrice").value || 0, stock = +$("pStock").value || 0;
+  if (!name) return toast("Nama barang wajib diisi.");
+  db.products.push({ id: uniqueId(), name: name, cost: cost, price: price, stock: stock });
+  save();
+  $("pName").value = ""; $("pCost").value = ""; $("pPrice").value = ""; $("pStock").value = "";
+  renderAll();
+  toast("Barang berhasil ditambahkan.");
 }
-function renderProducts(){
- if($("productsTable")) {
-  $("productsTable").innerHTML=db.products.map((p,i)=>`<tr><td>${esc(p.name)}</td><td>${rupiah(p.cost)}</td><td>${rupiah(p.price)}</td><td>${p.stock}</td><td><button class="mini del" onclick="deleteProduct(${i})">Eliminar</button></td></tr>`).join("")||`<tr><td colspan="5">No hay productos.</td></tr>`;
- }
+
+function renderProducts() {
+  if ($("productsTable")) {
+    $("productsTable").innerHTML = db.products.map(function(p, i) {
+      return '<tr><td>' + esc(p.name) + '</td><td>' + rupiah(p.cost) + '</td><td>' + rupiah(p.price) + '</td><td>' + p.stock + '</td><td><button class="mini del" onclick="deleteProduct(' + i + ')">Hapus</button></td></tr>';
+    }).join('') || '<tr><td colspan="5">Belum ada barang.</td></tr>';
+  }
 }
-function deleteProduct(i){if(confirm("¿Eliminar este producto?")){db.products.splice(i,1);save();renderAll()}}
-function fillProductSelect(){
- if($("saleProduct")) {
-  $("saleProduct").innerHTML=`<option value="">-- seleccionar producto --</option>`+db.products.map(p=>`<option value="${p.id}">${esc(p.name)} (stock ${p.stock})</option>`).join("");
- }
+
+function deleteProduct(i) {
+  if (confirm("Hapus barang ini?")) { db.products.splice(i, 1); save(); renderAll(); }
 }
-function syncSalePrice(){
- if($("saleProduct")) {
-  const p=db.products.find(x=>x.id===$("saleProduct").value);
-  if($("salePrice")) $("salePrice").value=p?p.price:"";
-  if($("stockInfo")) $("stockInfo").textContent=p?`Stock: ${p.stock}`:"";
+
+function fillProductSelect() {
+  if ($("saleProduct")) {
+    $("saleProduct").innerHTML = '<option value="">-- pilih barang --</option>' + db.products.map(function(p) {
+      return '<option value="' + p.id + '">' + esc(p.name) + ' (stok ' + p.stock + ')</option>';
+    }).join("");
+  }
+}
+
+function syncSalePrice() {
+  if ($("saleProduct")) {
+    var p = db.products.find(function(x) { return x.id === $("saleProduct").value; });
+    if ($("salePrice")) $("salePrice").value = p ? p.price : "";
+    if ($("stockInfo")) $("stockInfo").textContent = p ? "Stok: " + p.stock : "";
+    calcSaleTotal();
+  }
+}
+
+function calcSaleTotal() {
+  if ($("saleTotal") && $("salePrice") && $("saleQty")) {
+    $("saleTotal").textContent = rupiah((+$("salePrice").value || 0) * (+$("saleQty").value || 0));
+  }
+}
+
+function addSale() {
+  if (!$("saleProduct") || !$("salePrice") || !$("saleQty") || !$("saleDate")) return;
+  var p = db.products.find(function(x) { return x.id === $("saleProduct").value; });
+  var price = +$("salePrice").value || 0, qty = +$("saleQty").value || 0, date = $("saleDate").value || today();
+  if (!p) return toast("Pilih barang.");
+  if (qty < 1) return toast("Jumlah minimal 1.");
+  if (p.stock < qty) return toast("Stok tidak mencukupi.");
+  var newId = uniqueId();
+  db.sales.push({ id: newId, date: date, productId: p.id, product: p.name, price: price, qty: qty, cost: p.cost, total: price * qty, profit: (price - p.cost) * qty });
+  p.stock -= qty;
+  save();
+  $("saleProduct").value = ""; $("salePrice").value = ""; $("saleQty").value = 1;
+  if ($("stockInfo")) $("stockInfo").textContent = "";
   calcSaleTotal();
- }
+  renderAll();
+  toast("Penjualan berhasil disimpan.");
+  printReceipt(newId);
 }
-function calcSaleTotal(){
- if($("saleTotal") && $("salePrice") && $("saleQty")) {
-  $("saleTotal").textContent=rupiah((+$("salePrice").value||0)*(+$("saleQty").value||0));
- }
-}
-function addSale(){
- if(!$("saleProduct") || !$("salePrice") || !$("saleQty") || !$("saleDate")) return;
 
- const p=db.products.find(x=>x.id===$("saleProduct").value),price=+$("salePrice").value||0,qty=+$("saleQty").value||0,date=$("saleDate").value||today();
- if(!p)return toast("Selecciona un producto."); if(qty<1)return toast("Cantidad mínima 1."); if(p.stock<qty)return toast("Stock insuficiente.");
- const newId=uniqueId();
- db.sales.push({id:newId,date,productId:p.id,product:p.name,price,qty,cost:p.cost,total:price*qty,profit:(price-p.cost)*qty});
- p.stock-=qty;save();$("saleProduct").value="";$("salePrice").value="";$("saleQty").value=1;if($("stockInfo")) $("stockInfo").textContent="";calcSaleTotal();renderAll();toast("Venta guardada exitosamente.")
- printReceipt(newId);
+function renderSales() {
+  if (!$("saleSearch") || !$("salesTable")) return;
+  var q = $("saleSearch").value.toLowerCase();
+  var rows = db.sales.filter(function(s) { return s.product.toLowerCase().indexOf(q) !== -1; }).slice().reverse();
+  $("salesTable").innerHTML = rows.map(function(s, i) {
+    return '<tr><td>' + (i + 1) + '</td><td>' + s.date + '</td><td>' + esc(s.product) + '</td><td>' + rupiah(s.price) + '</td><td>' + s.qty + '</td><td>' + rupiah(s.total) + '</td><td><button class="mini" onclick="printReceipt(\'' + s.id + '\')">Struk</button> <button class="mini del" onclick="deleteSale(\'' + s.id + '\')">Hapus</button></td></tr>';
+  }).join('') || '<tr><td colspan="7">Belum ada transaksi.</td></tr>';
 }
-function renderSales(){
- if(!$("saleSearch") || !$("salesTable")) return;
 
- const q=$("saleSearch").value.toLowerCase();
- const rows=db.sales.filter(s=>s.product.toLowerCase().includes(q)).slice().reverse();
- $("salesTable").innerHTML=rows.map((s,i)=>`<tr><td>${i+1}</td><td>${s.date}</td><td>${esc(s.product)}</td><td>${rupiah(s.price)}</td><td>${s.qty}</td><td>${rupiah(s.total)}</td><td><button class="mini" onclick="printReceipt('${s.id}')">🧾</button> <button class="mini del" onclick="deleteSale('${s.id}')">Eliminar</button></td></tr>`).join("")||`<tr><td colspan="7">No hay transacciones.</td></tr>`;
+function deleteSale(id) {
+  var s = db.sales.find(function(x) { return x.id === id; });
+  if (!s || !confirm("Hapus transaksi dan kembalikan stok?")) return;
+  var p = db.products.find(function(x) { return x.id === s.productId; });
+  if (p) p.stock += s.qty;
+  db.sales = db.sales.filter(function(x) { return x.id !== id; });
+  save();
+  renderAll();
 }
-function deleteSale(id){const s=db.sales.find(x=>x.id===id);if(!s||!confirm("¿Eliminar transacción y devolver stock?"))return;const p=db.products.find(x=>x.id===s.productId);if(p)p.stock+=s.qty;db.sales=db.sales.filter(x=>x.id!==id);save();renderAll()}
-function daySales(date){return db.sales.filter(s=>s.date===date)}
-function renderDashboard(){
- if(!$("dashDate") || !$("sTransactions") || !$("sItems") || !$("sRevenue") || !$("sProfit") || !$("weeklyChart") || !$("topProducts")) return;
 
- const date=$("dashDate").value||today(),a=daySales(date),items=a.reduce((n,s)=>n+s.qty,0),rev=a.reduce((n,s)=>n+s.total,0),profit=a.reduce((n,s)=>n+s.profit,0);
- $("sTransactions").textContent=a.length;$("sItems").textContent=items;$("sRevenue").textContent=rupiah(rev);$("sProfit").textContent=rupiah(profit);
- const days=[...Array(7)].map((_,i)=>{let d=new Date(date+"T00:00:00");d.setDate(d.getDate()-6+i);return d.toISOString().slice(0,10)});
- const vals=days.map(d=>daySales(d).reduce((n,s)=>n+s.total,0)),max=Math.max(...vals,1);
- $("weeklyChart").innerHTML=days.map((d,i)=>`<div class="bar-wrap"><span>${rupiah(vals[i]).replace("Rp ","")}</span><div class="bar" style="height:${Math.max(2,vals[i]/max*160)}px"></div><div class="bar-label">${d.slice(5)}</div></div>`).join("");
- const counts={};a.forEach(s=>counts[s.product]=(counts[s.product]||0)+s.qty);
- $("topProducts").innerHTML=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,7).map(x=>`<div class="list-row"><span>${esc(x[0])}</span><b>${x[1]} pcs</b></div>`).join("")||"<p>No hay ventas.</p>";
-}
-function filteredReport(){
- if(!$("reportFrom") || !$("reportTo")) return db.sales;
- const f=$("reportFrom").value,t=$("reportTo").value;return db.sales.filter(s=>(!f||s.date>=f)&&(!t||s.date<=t));
-}
-function renderReport(){
- if(!$("rTransactions") || !$("rItems") || !$("rRevenue") || !$("rProfit") || !$("reportTable")) return;
+function daySales(date) { return db.sales.filter(function(s) { return s.date === date; }); }
 
- const a=filteredReport(),rev=a.reduce((n,s)=>n+s.total,0),profit=a.reduce((n,s)=>n+s.profit,0);
- $("rTransactions").textContent=a.length;$("rItems").textContent=a.reduce((n,s)=>n+s.qty,0);$("rRevenue").textContent=rupiah(rev);$("rProfit").textContent=rupiah(profit);
- $("reportTable").innerHTML=a.map(s=>`<tr><td>${s.date}</td><td>${esc(s.product)}</td><td>${rupiah(s.price)}</td><td>${s.qty}</td><td>${rupiah(s.total)}</td><td>${rupiah(s.profit)}</td></tr>`).join("")||`<tr><td colspan="6">No hay datos.</td></tr>`;
-}
-function exportCSV(){
- const a=filteredReport();let csv="Fecha,Producto,Precio,Cantidad,Total,Ganancia\n"+a.map(s=>[s.date,`"${s.product.replaceAll('"','""')}"`,s.price,s.qty,s.total,s.profit].join(",")).join("\n");
- download(new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"}),"reporte-ventas.csv")
-}
-function printReport(){
- if(!$("printArea") || !$("reportFrom") || !$("reportTo")) return;
+function renderDashboard() {
+  if (!$("dashDate") || !$("sTransactions") || !$("sItems") || !$("sRevenue") || !$("sProfit") || !$("weeklyChart") || !$("topProducts")) return;
 
- const a=filteredReport();$("printArea").innerHTML=`<h1>Reporte de Ventas</h1><p>Período: ${$("reportFrom").value||"-"} a ${$("reportTo").value||"-"}</p><table><thead><tr><th>Fecha</th><th>Producto</th><th>Precio</th><th>Cantidad</th><th>Total</th><th>Ganancia</th></tr></thead><tbody>${a.map(s=>`<tr><td>${s.date}</td><td>${esc(s.product)}</td><td>${rupiah(s.price)}</td><td>${s.qty}</td><td>${rupiah(s.total)}</td><td>${rupiah(s.profit)}</td></tr>`).join("")}</tbody></table><p><b>Total ingresos: ${rupiah(a.reduce((n,s)=>n+s.total,0))}</b></p>`;window.print();
-}
-function printReceipt(id){
- if(!$("printArea")) return;
+  var date = $("dashDate").value || today();
+  var a = daySales(date);
+  var items = a.reduce(function(n, s) { return n + s.qty; }, 0);
+  var rev = a.reduce(function(n, s) { return n + s.total; }, 0);
+  var profit = a.reduce(function(n, s) { return n + s.profit; }, 0);
 
- const s=db.sales.find(x=>x.id===id);if(!s)return;
- $("printArea").innerHTML=`<h1>Recibo de Venta</h1><p>Kopi Tutug<br>${s.date}</p><hr><p>${esc(s.product)}<br>${s.qty} × ${rupiah(s.price)}</p><h2>Total ${rupiah(s.total)}</h2><p>¡Gracias!</p>`;window.print();
-}
-function backup(){download(new Blob([JSON.stringify(db,null,2)],{type:"application/json"}),`backup-ventas-${today()}.json`)}
-function restore(){
- const f=$("restoreFile").files[0];if(!f)return toast("Selecciona un archivo de respaldo JSON.");
- const r=new FileReader();r.onload=()=>{try{const x=JSON.parse(r.result);if(!x.products||!x.sales)throw 0;if(!confirm("Restaurar reemplazará los datos actuales. ¿Continuar?"))return;db=x;save();renderAll();toast("Restauración exitosa.")}catch(e){toast("Archivo de respaldo no válido.")}};r.readAsText(f)
-}
-function changePin(){
- if(!$("oldPin") || !$("newPin") || !$("pinMsg")) return;
+  $("sTransactions").textContent = a.length;
+  $("sItems").textContent = items;
+  $("sRevenue").textContent = rupiah(rev);
+  $("sProfit").textContent = rupiah(profit);
 
- if($("oldPin").value!==db.pin)return $("pinMsg").textContent="PIN anterior incorrecto.";if($("newPin").value.length<4)return $("pinMsg").textContent="El nuevo PIN debe tener al menos 4 dígitos.";db.pin=$("newPin").value;save();$("pinMsg").textContent="PIN cambiado exitosamente.";
+  var days = [];
+  for (var i = 6; i >= 0; i--) {
+    var d = new Date(date + "T00:00:00");
+    d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  var vals = days.map(function(d) { return daySales(d).reduce(function(n, s) { return n + s.total; }, 0); });
+  var max = Math.max.apply(null, vals.concat([1]));
+
+  $("weeklyChart").innerHTML = days.map(function(d, i) {
+    return '<div class="bar-wrap"><span>' + rupiah(vals[i]).replace("Rp ", "") + '</span><div class="bar" style="height:' + Math.max(2, vals[i] / max * 160) + 'px"></div><div class="bar-label">' + d.slice(5) + '</div></div>';
+  }).join("");
+
+  var counts = {};
+  a.forEach(function(s) { counts[s.product] = (counts[s.product] || 0) + s.qty; });
+  $("topProducts").innerHTML = Object.keys(counts).sort(function(a, b) { return counts[b] - counts[a]; }).slice(0, 7).map(function(x) {
+    return '<div class="list-row"><span>' + esc(x) + '</span><b>' + counts[x] + ' pcs</b></div>';
+  }).join('') || '<p>Belum ada penjualan.</p>';
 }
-function clearData(){if(confirm("¿Eliminar TODOS los productos y transacciones?")){db.products=[];db.sales=[];save();renderAll();toast("Todos los datos eliminados.")}}
-function download(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
-function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":String.fromCharCode(38)+"amp;","<":String.fromCharCode(60)+"lt;",">":String.fromCharCode(62)+"gt;",'"':String.fromCharCode(34)+"quot;","'":"&#039;"}[m]))}
-if("serviceWorker" in navigator)window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js").catch(console.error));
+
+function filteredReport() {
+  if (!$("reportFrom") || !$("reportTo")) return db.sales;
+  var f = $("reportFrom").value, t = $("reportTo").value;
+  return db.sales.filter(function(s) { return (!f || s.date >= f) && (!t || s.date <= t); });
+}
+
+function renderReport() {
+  if (!$("rTransactions") || !$("rItems") || !$("rRevenue") || !$("rProfit") || !$("reportTable")) return;
+  var a = filteredReport();
+  $("rTransactions").textContent = a.length;
+  $("rItems").textContent = a.reduce(function(n, s) { return n + s.qty; }, 0);
+  $("rRevenue").textContent = rupiah(a.reduce(function(n, s) { return n + s.total; }, 0));
+  $("rProfit").textContent = rupiah(a.reduce(function(n, s) { return n + s.profit; }, 0));
+  $("reportTable").innerHTML = a.map(function(s) {
+    return '<tr><td>' + s.date + '</td><td>' + esc(s.product) + '</td><td>' + rupiah(s.price) + '</td><td>' + s.qty + '</td><td>' + rupiah(s.total) + '</td><td>' + rupiah(s.profit) + '</td></tr>';
+  }).join('') || '<tr><td colspan="6">Tidak ada data.</td></tr>';
+}
+
+function exportCSV() {
+  var a = filteredReport();
+  var csv = "Tanggal,Barang,Harga,Jumlah,Total,Laba\n" + a.map(function(s) {
+    return [s.date, '"' + s.product.replace(/"/g, '""') + '"', s.price, s.qty, s.total, s.profit].join(",");
+  }).join("\n");
+  download(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }), "laporan-penjualan.csv");
+}
+
+function printReport() {
+  if (!$("printArea") || !$("reportFrom") || !$("reportTo")) return;
+  var a = filteredReport();
+  $("printArea").innerHTML = '<h1>Laporan Penjualan</h1><p>Periode: ' + ($("reportFrom").value || "-") + ' s/d ' + ($("reportTo").value || "-") + '</p><table><thead><tr><th>Tanggal</th><th>Barang</th><th>Harga</th><th>Jumlah</th><th>Total</th><th>Laba</th></tr></thead><tbody>' + a.map(function(s) {
+    return '<tr><td>' + s.date + '</td><td>' + esc(s.product) + '</td><td>' + rupiah(s.price) + '</td><td>' + s.qty + '</td><td>' + rupiah(s.total) + '</td><td>' + rupiah(s.profit) + '</td></tr>';
+  }).join("") + '</tbody></table><p><b>Total omzet: ' + rupiah(a.reduce(function(n, s) { return n + s.total; }, 0)) + '</b></p>';
+  window.print();
+}
+
+function printReceipt(id) {
+  if (!$("printArea")) return;
+  var s = db.sales.find(function(x) { return x.id === id; });
+  if (!s) return;
+  $("printArea").innerHTML = '<h1>Struk Penjualan</h1><p>Kopi Tutug<br>' + s.date + '</p><hr><p>' + esc(s.product) + '<br>' + s.qty + ' x ' + rupiah(s.price) + '</p><h2>Total ' + rupiah(s.total) + '</h2><p>Terima kasih.</p>';
+  window.print();
+}
+
+function backup() {
+  download(new Blob([JSON.stringify(db, null, 2)], { type: "application/json" }), "backup-penjualan-" + today() + ".json");
+}
+
+function restore() {
+  var f = $("restoreFile").files[0];
+  if (!f) return toast("Pilih file backup JSON.");
+  var r = new FileReader();
+  r.onload = function() {
+    try {
+      var x = JSON.parse(r.result);
+      if (!x.products || !x.sales) throw 0;
+      if (!confirm("Restore akan mengganti data saat ini. Lanjut?")) return;
+      db = x;
+      save();
+      renderAll();
+      toast("Restore berhasil.");
+    } catch (e) {
+      toast("File backup tidak valid.");
+    }
+  };
+  r.readAsText(f);
+}
+
+function changePin() {
+  if (!$("oldPin") || !$("newPin") || !$("pinMsg")) return;
+  if ($("oldPin").value !== db.pin) return $("pinMsg").textContent = "PIN lama salah.";
+  if ($("newPin").value.length < 4) return $("pinMsg").textContent = "PIN baru minimal 4 angka.";
+  db.pin = $("newPin").value;
+  save();
+  $("pinMsg").textContent = "PIN berhasil diubah.";
+}
+
+function clearData() {
+  if (confirm("Hapus SEMUA produk dan transaksi?")) {
+    db.products = [];
+    db.sales = [];
+    save();
+    renderAll();
+    toast("Semua data dihapus.");
+  }
+}
+
+function download(blob, name) {
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(function() { URL.revokeObjectURL(a.href); }, 1000);
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, function(m) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m];
+  });
+}
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function() {
+    navigator.serviceWorker.register("./service-worker.js")
+      .then(function(registration) { return registration.update(); })
+      .catch(function(error) { console.warn("Service worker registration failed:", error); });
+  });
+}
 boot();

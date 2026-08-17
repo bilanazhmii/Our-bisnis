@@ -1,19 +1,71 @@
-const CACHE="kopi-tutug-v5";
-const ASSETS=["./","./index.html","./style.css","./script.js","./manifest.json","./icon.png"];
-self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));
-self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
-self.addEventListener("fetch",e=>{
-  // Do not cache API requests or CDN scripts - always fetch fresh
-  if(e.request.url.includes('/api/') || e.request.url.includes('cdn.jsdelivr.net')) return;
-  // Network-first for HTML to get latest version
-  if(e.request.mode==='navigate'){
-    e.respondWith(fetch(e.request).then(r=>{
-      const clone=r.clone();
-      caches.open(CACHE).then(c=>c.put(e.request,clone));
-      return r;
-    }).catch(()=>caches.match(e.request)));
+const CACHE = "kopi-tutug-v7";
+
+const STATIC_ASSETS = [
+  "./",
+  "./index.html",
+  "./style.css",
+  "./manifest.json",
+  "./icon.png"
+];
+
+function shouldBypassCache(url) {
+  return (
+    url.includes("/api/") ||
+    url.includes("supabase.co") ||
+    url.includes("vercel.com/sso-api") ||
+    url.endsWith(".js")
+  );
+}
+
+self.addEventListener("install", function(event) {
+  event.waitUntil(
+    caches.open(CACHE)
+      .then(function(cache) { return cache.addAll(STATIC_ASSETS); })
+      .then(function() { return self.skipWaiting(); })
+  );
+});
+
+self.addEventListener("activate", function(event) {
+  event.waitUntil(
+    caches.keys()
+      .then(function(keys) {
+        return Promise.all(
+          keys.filter(function(key) { return key !== CACHE; })
+            .map(function(key) { return caches.delete(key); })
+        );
+      })
+      .then(function() { return self.clients.claim(); })
+  );
+});
+
+self.addEventListener("fetch", function(event) {
+  var request = event.request;
+  var url = request.url;
+
+  if (shouldBypassCache(url)) {
     return;
   }
-  // Cache-first for static assets
-  e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request)));
+
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then(function(response) {
+          if (response.ok) {
+            var clone = response.clone();
+            caches.open(CACHE).then(function(cache) {
+              cache.put(request, clone);
+            });
+          }
+          return response;
+        })
+        .catch(function() { return caches.match(request); })
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request).then(function(cached) {
+      return cached || fetch(request);
+    })
+  );
 });

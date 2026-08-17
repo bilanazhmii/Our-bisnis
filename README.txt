@@ -38,7 +38,7 @@ Cara menjalankan:
 Setup Supabase (Opsional - untuk sinkronisasi data):
 1. Buka file SUPABASE_SETUP.md untuk panduan lengkap.
 2. Copy config.example.js ke config.js dan isi dengan kredensial Supabase.
-3. Uncomment script config.js di index.html.
+3. Tidak perlu menambahkan tag script. Aplikasi memuat config.js otomatis hanya saat endpoint Vercel tidak tersedia.
 4. Copy semua script dari setup_supabase.sql dan paste ke Supabase SQL Editor.
 5. Configure email/SMTP di Supabase Dashboard untuk email verification.
 6. Setup admin pertama dengan menjalankan SQL untuk mengubah role.

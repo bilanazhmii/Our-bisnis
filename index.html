@@ -28,6 +28,12 @@
       <button id="emailLoginBtn" class="primary">Masuk</button>
     </div>
 
+    <div id="localLoginForm" class="hidden">
+      <input id="pinInput" type="password" placeholder="PIN Admin" inputmode="numeric" maxlength="8">
+      <button id="pinLoginBtn" class="primary">Masuk</button>
+      <small>Mode lokal tanpa cloud. PIN awal: 1234</small>
+    </div>
+
     <div id="registerForm" class="hidden">
       <input id="registerEmailInput" type="email" placeholder="Email">
       <input id="registerPasswordInput" type="password" placeholder="Password (minimal 6 karakter)">
@@ -36,7 +42,7 @@
       <small>Setelah daftar, cek email Anda untuk verifikasi sebelum login.</small>
     </div>
 
-    <button id="resendVerificationBtn" class="secondary hidden">📧 Kirim Ulang Verifikasi Email</button>
+    <button id="resendVerificationBtn" class="secondary hidden">Kirim Ulang Verifikasi Email</button>
 
     <div id="loginMsg" class="msg"></div>
   </div>
@@ -84,10 +90,10 @@
       <label>Jumlah<input id="saleQty" type="number" min="1" step="1" value="1"></label>
     </div>
     <div class="sale-preview">Total: <b id="saleTotal">Rp 0</b> <span id="stockInfo"></span></div>
-    <button id="addSaleBtn" class="primary">＋ Tambah Penjualan</button>
+    <button id="addSaleBtn" class="primary">+ Tambah Penjualan</button>
   </div>
   <div class="card">
-    <div class="toolbar"><h2>Daftar Transaksi</h2><input id="saleSearch" placeholder="🔎 Cari barang..."></div>
+    <div class="toolbar"><h2>Daftar Transaksi</h2><input id="saleSearch" placeholder="Cari barang..."></div>
     <div class="table-wrap"><table><thead><tr><th>No</th><th>Tanggal</th><th>Barang</th><th>Harga</th><th>Jumlah</th><th>Total</th><th>Aksi</th></tr></thead><tbody id="salesTable"></tbody></table></div>
   </div>
 </section>
@@ -101,7 +107,7 @@
       <label>Harga jual<input id="pPrice" type="number" min="0" placeholder="15000"></label>
       <label>Stok awal<input id="pStock" type="number" min="0" placeholder="20"></label>
     </div>
-    <button id="addProductBtn" class="primary">＋ Tambah Barang</button>
+    <button id="addProductBtn" class="primary">+ Tambah Barang</button>
   </div>
   <div class="card"><div class="table-wrap"><table><thead><tr><th>Barang</th><th>Modal</th><th>Jual</th><th>Stok</th><th>Aksi</th></tr></thead><tbody id="productsTable"></tbody></table></div></div>
 </section>
@@ -113,7 +119,7 @@
       <label>Dari<input id="reportFrom" type="date"></label>
       <label>Sampai<input id="reportTo" type="date"></label>
     </div>
-    <div class="actions"><button id="reportBtn" class="primary">Tampilkan</button><button id="exportCsvBtn" class="secondary">📥 Export Excel (CSV)</button><button id="printReportBtn" class="secondary">📄 Cetak / PDF</button></div>
+    <div class="actions"><button id="reportBtn" class="primary">Tampilkan</button><button id="exportCsvBtn" class="secondary">Export CSV</button><button id="printReportBtn" class="secondary">Cetak / PDF</button></div>
   </div>
   <div class="stats">
     <div class="stat"><span>Transaksi</span><strong id="rTransactions">0</strong></div>
@@ -128,12 +134,12 @@
   <div class="page-head"><div><h1>Backup & Restore</h1><p>Simpan data untuk dipindahkan ke HP atau komputer lain.</p></div></div>
   <div class="card">
     <h2>Backup</h2><p>Unduh seluruh data aplikasi sebagai file JSON.</p>
-    <button id="backupBtn" class="primary">💾 Download Backup</button>
+    <button id="backupBtn" class="primary">Download Backup</button>
   </div>
   <div class="card">
-    <h2>Restore</h2><p>Memasukkan backup akan mengganti data saat ini.</p>
+    <h2>Restore</h2><p>Memuat backup akan mengganti data saat ini.</p>
     <input id="restoreFile" type="file" accept=".json">
-    <button id="restoreBtn" class="secondary">↩️ Restore Data</button>
+    <button id="restoreBtn" class="secondary">Restore Data</button>
   </div>
 </section>
 
@@ -147,7 +153,7 @@
     </div>
     <button id="changePinBtn" class="primary">Simpan PIN</button><div id="pinMsg" class="msg"></div>
   </div>
-  <div class="card"><h2>Data</h2><button id="clearBtn" class="danger-btn">⚠️ Hapus Semua Data</button></div>
+  <div class="card"><h2>Data</h2><button id="clearBtn" class="danger-btn">Hapus Semua Data</button></div>
 </section>
 
 <section id="admin" class="page hidden">
@@ -155,18 +161,15 @@
   <div class="card">
     <h2>Daftar User</h2>
     <div class="toolbar">
-      <input id="userSearch" placeholder="🔎 Cari user...">
-      <button id="refreshUsersBtn" class="secondary">🔄 Refresh</button>
+      <input id="userSearch" placeholder="Cari user...">
+      <button id="refreshUsersBtn" class="secondary">Refresh</button>
     </div>
     <div class="table-wrap"><table><thead><tr><th>Email</th><th>Role</th><th>Terdaftar</th><th>Aksi</th></tr></thead><tbody id="usersTable"></tbody></table></div>
   </div>
-  <div class="card">
-    <h2>Statistik User</h2>
-    <div class="stats">
-      <div class="stat"><span>Total User</span><strong id="totalUsers">0</strong></div>
-      <div class="stat"><span>Admin</span><strong id="totalAdmins">0</strong></div>
-      <div class="stat"><span>User Biasa</span><strong id="totalRegularUsers">0</strong></div>
-    </div>
+  <div class="stats">
+    <div class="stat"><span>Total User</span><strong id="totalUsers">0</strong></div>
+    <div class="stat"><span>Admin</span><strong id="totalAdmins">0</strong></div>
+    <div class="stat"><span>User Biasa</span><strong id="totalRegularUsers">0</strong></div>
   </div>
 </section>
 </main>

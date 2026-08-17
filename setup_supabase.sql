@@ -42,10 +42,52 @@ CREATE TABLE IF NOT EXISTS user_roles (
   CONSTRAINT valid_role CHECK (role IN ('user', 'admin', 'super_admin'))
 );
 
+-- Helper functions must be created before RLS policies. They avoid recursive
+-- user_roles policies when checking whether the current user is an admin.
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = auth.uid()::text
+    AND role IN ('admin', 'super_admin')
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION public.is_super_admin()
+RETURNS BOOLEAN
+LANGUAGE SQL
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = auth.uid()::text
+    AND role = 'super_admin'
+  );
+$$;
+
 -- Enable Row Level Security (RLS)
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sales ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
+
+-- This makes the script safe to run again when updating an existing project.
+DROP POLICY IF EXISTS "Users can view own products" ON products;
+DROP POLICY IF EXISTS "Users can insert own products" ON products;
+DROP POLICY IF EXISTS "Users can update own products" ON products;
+DROP POLICY IF EXISTS "Users can delete own products" ON products;
+DROP POLICY IF EXISTS "Users can view own sales" ON sales;
+DROP POLICY IF EXISTS "Users can insert own sales" ON sales;
+DROP POLICY IF EXISTS "Users can update own sales" ON sales;
+DROP POLICY IF EXISTS "Users can delete own sales" ON sales;
+DROP POLICY IF EXISTS "Super admins can manage all roles" ON user_roles;
+DROP POLICY IF EXISTS "Users can view own role" ON user_roles;
 
 -- ============================================
 -- POLICIES untuk PRODUCTS
@@ -56,11 +98,7 @@ CREATE POLICY "Users can view own products"
   ON products FOR SELECT
   USING (
     auth.uid()::text = user_id OR
-    EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_id = auth.uid()::text
-      AND role IN ('admin', 'super_admin')
-    )
+    public.is_admin()
   );
 
 -- User hanya bisa insert data sendiri
@@ -73,11 +111,7 @@ CREATE POLICY "Users can update own products"
   ON products FOR UPDATE
   USING (
     auth.uid()::text = user_id OR
-    EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_id = auth.uid()::text
-      AND role IN ('admin', 'super_admin')
-    )
+    public.is_admin()
   );
 
 -- User hanya bisa delete data sendiri
@@ -94,11 +128,7 @@ CREATE POLICY "Users can view own sales"
   ON sales FOR SELECT
   USING (
     auth.uid()::text = user_id OR
-    EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_id = auth.uid()::text
-      AND role IN ('admin', 'super_admin')
-    )
+    public.is_admin()
   );
 
 -- User hanya bisa insert data sendiri
@@ -111,11 +141,7 @@ CREATE POLICY "Users can update own sales"
   ON sales FOR UPDATE
   USING (
     auth.uid()::text = user_id OR
-    EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_id = auth.uid()::text
-      AND role IN ('admin', 'super_admin')
-    )
+    public.is_admin()
   );
 
 -- User hanya bisa delete data sendiri
@@ -131,11 +157,7 @@ CREATE POLICY "Users can delete own sales"
 CREATE POLICY "Super admins can manage all roles"
   ON user_roles FOR ALL
   USING (
-    EXISTS (
-      SELECT 1 FROM user_roles
-      WHERE user_id = auth.uid()::text
-      AND role = 'super_admin'
-    )
+    public.is_super_admin()
   );
 
 -- User bisa view role sendiri
@@ -146,12 +168,6 @@ CREATE POLICY "Users can view own role"
 -- ============================================
 -- FUNCTIONS dan TRIGGERS
 -- ============================================
-
--- Function untuk check user role
-CREATE OR REPLACE FUNCTION get_user_role(user_id_param TEXT)
-RETURNS TEXT AS $$
-  SELECT role FROM user_roles WHERE user_id = user_id_param;
-$$ LANGUAGE SQL SECURITY DEFINER;
 
 -- Function untuk otomatis create user role saat user baru register
 CREATE OR REPLACE FUNCTION handle_new_user()
