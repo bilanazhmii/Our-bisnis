@@ -20,7 +20,7 @@ var MSG = {
   errorInvalidLogin: "Email atau password salah.",
   errorEmailNotConfirmed: "Email belum diverifikasi. Cek email Anda untuk tautan verifikasi.",
   errorAlreadyRegistered: "Email sudah terdaftar. Silakan login.",
-  errorRateLimit: "Terlalu banyak percobaan. Tunggu beberapa saat.",
+  errorRateLimit: "Terlalu banyak percobaan. Tunggu beberapa menit sebelum mencoba lagi.",
   errorWeakPassword: "Password terlalu lemah. Minimal 6 karakter.",
   errorSupabaseNotConfigured: "Supabase belum dikonfigurasi. Periksa environment variables di Vercel.",
   errorRequiredFields: "Email dan password wajib diisi.",
@@ -43,6 +43,8 @@ var useSupabase = false;
 var currentUser = null;
 var userRole = "user";
 var cachedUsers = [];
+var registerInProgress = false;
+var registerCooldownUntil = 0;
 var syncQueue = Promise.resolve();
 var pendingDeletes = { products: [], sales: [] };
 
@@ -151,6 +153,7 @@ function extractErrorPayload(source) {
 }
 
 function parseSupabaseError(source) {
+  if (source && source.status === 429) return MSG.errorRateLimit;
   if (source && source.status >= 500) return MSG.errorAuthServer;
   var payload = extractErrorPayload(source);
   if (!payload) return MSG.errorGeneric;
@@ -821,6 +824,19 @@ async function handleEmailRegister() {
     return;
   }
 
+  if (registerInProgress) return;
+  if (Date.now() < registerCooldownUntil) {
+    $("loginMsg").textContent = MSG.errorRateLimit;
+    toast(MSG.errorRateLimit);
+    return;
+  }
+
+  var registerButton = $("registerBtn");
+  registerInProgress = true;
+  if (registerButton) {
+    registerButton.disabled = true;
+    registerButton.textContent = "Mendaftarkan...";
+  }
   try {
     var data = await supabaseSignUp(email, password);
 
@@ -844,9 +860,16 @@ async function handleEmailRegister() {
       toast(MSG.successRegisterAutoLogin);
     }
   } catch (error) {
+    if (error && error.status === 429) registerCooldownUntil = Date.now() + 60000;
     var msg = parseSupabaseError(error);
     $("loginMsg").textContent = msg;
     toast(msg);
+  } finally {
+    registerInProgress = false;
+    if (registerButton) {
+      registerButton.disabled = false;
+      registerButton.textContent = "Daftar";
+    }
   }
 }
 
