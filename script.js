@@ -30,7 +30,7 @@ var MSG = {
   errorPinRequired: "PIN wajib diisi.",
   errorPinInvalid: "PIN salah.",
   successLogin: "Login berhasil.",
-  successRegister: "Registrasi berhasil! Cek email Anda untuk verifikasi sebelum login.",
+  successRegister: "Pendaftaran berhasil. Email verifikasi telah dikirim; periksa Inbox atau Spam, verifikasi email, lalu login.",
   successRegisterAutoLogin: "Registrasi berhasil! Anda sudah login.",
   successSync: "Data berhasil disinkronisasi dari cloud.",
   successSyncPartial: "Login berhasil, tetapi sinkronisasi data gagal.",
@@ -45,6 +45,22 @@ var userRole = "user";
 var cachedUsers = [];
 var registerInProgress = false;
 var registerCooldownUntil = 0;
+var verificationNotice = "";
+
+function getAuthRedirectUrl() {
+  return window.location.origin + window.location.pathname;
+}
+
+function readVerificationNotice() {
+  var params = new URLSearchParams(window.location.hash.slice(1));
+  if (params.get("type") === "signup" && params.get("access_token")) {
+    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+    return "Email berhasil diverifikasi. Silakan login menggunakan email dan password Anda.";
+  }
+  return "";
+}
+
+verificationNotice = readVerificationNotice();
 var syncQueue = Promise.resolve();
 var pendingDeletes = { products: [], sales: [] };
 
@@ -256,7 +272,7 @@ async function supabaseFetch(path, options) {
 }
 
 async function supabaseSignUp(email, password) {
-  return supabaseFetch("/auth/v1/signup", {
+  return supabaseFetch("/auth/v1/signup?redirect_to=" + encodeURIComponent(getAuthRedirectUrl()), {
     method: "POST",
     body: JSON.stringify({
       email: email.trim().toLowerCase(),
@@ -307,7 +323,7 @@ async function supabaseSignOut() {
 }
 
 async function supabaseResendVerification(email) {
-  return supabaseFetch("/auth/v1/resend", {
+  return supabaseFetch("/auth/v1/resend?redirect_to=" + encodeURIComponent(getAuthRedirectUrl()), {
     method: "POST",
     body: JSON.stringify({
       type: "signup",
@@ -636,6 +652,10 @@ async function restoreSession() {
 function boot() {
   initSupabase().then(function() {
     updateLoginMode();
+    if (verificationNotice && $("loginMsg")) {
+      $("loginMsg").textContent = verificationNotice;
+      toast(verificationNotice);
+    }
     return restoreSession();
   }).catch(function(error) {
     console.error('Boot error:', error);

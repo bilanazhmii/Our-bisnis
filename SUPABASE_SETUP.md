@@ -213,6 +213,12 @@ WHERE email = 'your-email@example.com';
 - Jalankan ulang seluruh `setup_supabase.sql` di Supabase SQL Editor agar trigger `handle_new_user` diperbarui.
 - Buka **Logs → Auth Logs** dan **Logs → Postgres Logs** di Supabase untuk melihat detail bila error masih ada. Error 500 pada signup biasanya berasal dari trigger atau database, bukan dari password pengguna.
 
+### Email verifikasi tidak masuk atau tautannya tidak kembali ke aplikasi
+- Di **Authentication → Providers → Email**, aktifkan **Confirm email** dan **Allow new users to sign up**.
+- Di **Authentication → URL Configuration**, isi **Site URL** dengan alamat production aplikasi. Tambahkan alamat production yang sama pada **Redirect URLs**; untuk preview Vercel tambahkan pola `https://*-bila-la.vercel.app/**`.
+- Atur SMTP di **Authentication → SMTP** pada dashboard Supabase. Variabel `SMTP_*` di Vercel tidak dipakai untuk email Supabase.
+- Periksa folder Spam. Untuk penggunaan production, gunakan SMTP kustom dan matikan email-link tracking pada penyedia email agar tautan verifikasi tidak diubah.
+
 ### Data tidak sinkron
 - Pastikan user sudah login dengan email
 - Cek console browser untuk error
