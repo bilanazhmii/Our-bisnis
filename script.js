@@ -595,6 +595,13 @@ function toast(t) {
   setTimeout(function() { $("toast").classList.remove("show"); }, 2200);
 }
 
+function showLoginMessage(message, isSuccess) {
+  if (!$("loginMsg")) return;
+  $("loginMsg").textContent = message;
+  $("loginMsg").classList.toggle("success", !!isSuccess);
+  toast(message);
+}
+
 function logged() {
   return sessionStorage.getItem("adminLogin") === "1";
 }
@@ -653,8 +660,7 @@ function boot() {
   initSupabase().then(function() {
     updateLoginMode();
     if (verificationNotice && $("loginMsg")) {
-      $("loginMsg").textContent = verificationNotice;
-      toast(verificationNotice);
+      showLoginMessage(verificationNotice, true);
     }
     return restoreSession();
   }).catch(function(error) {
@@ -846,8 +852,7 @@ async function handleEmailRegister() {
 
   if (registerInProgress) return;
   if (Date.now() < registerCooldownUntil) {
-    $("loginMsg").textContent = MSG.errorRateLimit;
-    toast(MSG.errorRateLimit);
+    showLoginMessage(MSG.errorRateLimit, false);
     return;
   }
 
@@ -860,15 +865,7 @@ async function handleEmailRegister() {
   try {
     var data = await supabaseSignUp(email, password);
 
-    if (data.user && !data.session) {
-      toast(MSG.successRegister);
-      if ($("resendVerificationBtn")) $("resendVerificationBtn").classList.remove("hidden");
-      showLoginTab("login");
-      if ($("emailInput")) $("emailInput").value = email;
-      return;
-    }
-
-    if (data.user && data.session) {
+    if (data && data.user && data.session) {
       currentUser = data.user;
       sessionStorage.setItem("adminLogin", "1");
       sessionStorage.setItem("supabaseUser", JSON.stringify(data.user));
@@ -878,12 +875,17 @@ async function handleEmailRegister() {
       await syncFromSupabase();
       renderAll();
       toast(MSG.successRegisterAutoLogin);
+      return;
     }
+
+    showLoginTab("login");
+    if ($("emailInput")) $("emailInput").value = email;
+    if ($("resendVerificationBtn")) $("resendVerificationBtn").classList.remove("hidden");
+    showLoginMessage(MSG.successRegister, true);
   } catch (error) {
     if (error && error.status === 429) registerCooldownUntil = Date.now() + 60000;
     var msg = parseSupabaseError(error);
-    $("loginMsg").textContent = msg;
-    toast(msg);
+    showLoginMessage(msg, false);
   } finally {
     registerInProgress = false;
     if (registerButton) {
@@ -918,10 +920,9 @@ async function handleResendVerification() {
     $("resendVerificationBtn").textContent = originalText;
     $("resendVerificationBtn").disabled = false;
 
-    toast(MSG.successResendVerification);
-    $("loginMsg").textContent = "";
+    showLoginMessage(MSG.successResendVerification, true);
   } catch (error) {
-    $("loginMsg").textContent = "Gagal mengirim email verifikasi: " + parseSupabaseError(error);
+    showLoginMessage("Gagal mengirim email verifikasi: " + parseSupabaseError(error), false);
     $("resendVerificationBtn").textContent = "Kirim Ulang Verifikasi Email";
     $("resendVerificationBtn").disabled = false;
   }
