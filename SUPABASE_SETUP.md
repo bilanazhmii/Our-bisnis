@@ -209,6 +209,10 @@ WHERE email = 'your-email@example.com';
 - Pastikan kredensial Supabase valid
 - Pastikan project Supabase sudah aktif
 
+### Error 500 saat daftar
+- Jalankan ulang seluruh `setup_supabase.sql` di Supabase SQL Editor agar trigger `handle_new_user` diperbarui.
+- Buka **Logs → Auth Logs** dan **Logs → Postgres Logs** di Supabase untuk melihat detail bila error masih ada. Error 500 pada signup biasanya berasal dari trigger atau database, bukan dari password pengguna.
+
 ### Data tidak sinkron
 - Pastikan user sudah login dengan email
 - Cek console browser untuk error

@@ -170,33 +170,28 @@ CREATE POLICY "Users can view own role"
 -- ============================================
 
 -- Function untuk otomatis create user role saat user baru register
-CREATE OR REPLACE FUNCTION handle_new_user()
+CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO user_roles (id, user_id, role, email)
+  INSERT INTO public.user_roles (id, user_id, role, email)
   VALUES (
     gen_random_uuid()::text,
     NEW.id::text,
     'user',
     NEW.email
-  );
+  )
+  ON CONFLICT (user_id) DO UPDATE
+  SET email = EXCLUDED.email,
+      updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
 
--- Trigger untuk otomatis create role saat user baru
--- Hanya buat trigger jika belum ada
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_trigger
-    WHERE tgname = 'on_auth_user_created'
-  ) THEN
-    CREATE TRIGGER on_auth_user_created
-      AFTER INSERT ON auth.users
-      FOR EACH ROW EXECUTE FUNCTION handle_new_user();
-  END IF;
-END $$;
+-- Recreate the trigger so an existing project always uses the function above.
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
 -- ============================================
 -- SETUP ADMIN PERTAMA (GANTI EMAIL DIBAWAH)
