@@ -13,8 +13,21 @@ let userRole = 'user'; // 'user', 'admin', 'super_admin'
 // Load Supabase SDK dynamically to avoid blocking page render
 function loadSupabaseSDK() {
   return new Promise((resolve, reject) => {
+    // Check if already loaded (avoid double declaration error)
     if (typeof window.supabase !== 'undefined') {
       resolve();
+      return;
+    }
+    // Check if script tag already exists
+    if (document.querySelector('script[src*="supabase-js"]')) {
+      // Wait for it to load
+      const checkInterval = setInterval(() => {
+        if (typeof window.supabase !== 'undefined') {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 100);
+      setTimeout(() => clearInterval(checkInterval), 10000);
       return;
     }
     const script = document.createElement('script');
