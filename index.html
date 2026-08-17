@@ -9,9 +9,7 @@
 <link rel="icon" href="icon.png" type="image/png">
 <title>Data Penjualan</title>
 <link rel="stylesheet" href="style.css">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<!-- Uncomment script config.js below after copying config.example.js to config.js and adding your credentials -->
-<!-- <script src="config.js"></script> -->
+<script src="config.js"></script>
 </head>
 <body>
 <div id="loginScreen" class="login-screen">
@@ -25,7 +23,13 @@
       <button id="registerTab" class="tab-btn">Daftar</button>
     </div>
 
-    daftar dan login saja
+    <div id="loginForm">
+      <input id="pinInput" type="password" inputmode="numeric" maxlength="8" placeholder="PIN admin">
+      <button id="loginBtn" class="primary">Masuk dengan PIN</button>
+      <small>PIN awal: <b>1234</b></small>
+
+      <div class="divider"><span>atau</span></div>
+
       <input id="emailInput" type="email" placeholder="Email">
       <input id="passwordInput" type="password" placeholder="Password">
       <button id="emailLoginBtn" class="primary">Masuk dengan Email</button>

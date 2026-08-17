@@ -10,25 +10,36 @@ let useSupabase = false;
 let currentUser = null;
 let userRole = 'user'; // 'user', 'admin', 'super_admin'
 
-// Load Supabase configuration from window object (set by config.js or inline)
-function initSupabase() {
-  // Check if Supabase is available
-  if (typeof window.supabase === 'undefined') {
-    console.log('Supabase SDK not loaded, using local storage only');
-    return;
-  }
+// Load Supabase SDK dynamically to avoid blocking page render
+function loadSupabaseSDK() {
+  return new Promise((resolve, reject) => {
+    if (typeof window.supabase !== 'undefined') {
+      resolve();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Gagal memuat Supabase SDK'));
+    document.head.appendChild(script);
+  });
+}
 
-  if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY) {
-    try {
+// Load Supabase configuration from window object (set by config.js or inline)
+async function initSupabase() {
+  try {
+    await loadSupabaseSDK();
+    if (window.SUPABASE_URL && window.SUPABASE_ANON_KEY &&
+        window.SUPABASE_URL.includes('supabase.co') &&
+        !window.SUPABASE_ANON_KEY.includes('your-anon-key')) {
       supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
       useSupabase = true;
       console.log('Supabase initialized successfully');
-    } catch (error) {
-      console.error('Failed to initialize Supabase:', error);
+    } else {
+      console.log('Supabase credentials not configured, using local storage only');
     }
-  } else {
-    console.log('Supabase credentials not found, using local storage only');
-    console.log('To enable Supabase sync, copy config.example.js to config.js and add your credentials');
+  } catch (error) {
+    console.error('Failed to initialize Supabase:', error);
   }
 }
 
@@ -289,7 +300,19 @@ async function deleteUser(userId) {
 function toast(t){$("toast").textContent=t;$("toast").classList.add("show");setTimeout(()=>$("toast").classList.remove("show"),2200)}
 function logged(){return sessionStorage.getItem("adminLogin")==="1"}
 function boot(){
- initSupabase(); // Initialize Supabase
+ initSupabase().then(() => {
+   // If Supabase is configured, check for existing session
+   if (useSupabase && supabase) {
+     supabase.auth.getSession().then(({ data }) => {
+       if (data.session) {
+         currentUser = data.session.user;
+         sessionStorage.setItem("adminLogin","1");
+         sessionStorage.setItem("supabaseUser", JSON.stringify(data.session.user));
+         fetchUserRole(data.session.user.id).then(() => showApp());
+       }
+     });
+   }
+ }); // Initialize Supabase asynchronously
 
  // PIN Login handlers
  if($("pinInput")) $("pinInput").addEventListener("keydown",e=>{if(e.key==="Enter")login()});
@@ -372,12 +395,14 @@ async function handleEmailLogin() {
   const password = $("passwordInput").value;
 
   if (!email || !password) {
-    $("loginMsg").textContent = "Email dan password wajib diisi.";
+    $("loginMsg").textContent = "⚠️ Email dan password wajib diisi.";
+    toast("Email dan password wajib diisi");
     return;
   }
 
   if (!useSupabase || !supabase) {
-    $("loginMsg").textContent = "Supabase tidak dikonfigurasi. Gunakan login PIN.";
+    $("loginMsg").textContent = "⚠️ Supabase belum dikonfigurasi. Gunakan login PIN (1234).";
+    toast("Supabase belum dikonfigurasi");
     return;
   }
 
@@ -387,11 +412,24 @@ async function handleEmailLogin() {
       password: password
     });
 
-    if (error) throw error;
+    if (error) {
+      // Map common Supabase errors to friendly messages
+      const msg = error.message.includes('Invalid login credentials')
+        ? "Email atau password salah."
+        : error.message.includes('Email not confirmed')
+        ? "Email belum diverifikasi. Cek email Anda."
+        : error.message.includes('rate limit')
+        ? "Terlalu banyak percobaan. Tunggu beberapa saat."
+        : error.message;
+      $("loginMsg").textContent = "⚠️ " + msg;
+      toast(msg);
+      return;
+    }
 
     // Check email verification
     if (!data.user.email_confirmed_at) {
-      $("loginMsg").textContent = "Email belum diverifikasi. Silakan cek email Anda untuk link verifikasi.";
+      $("loginMsg").textContent = "⚠️ Email belum diverifikasi. Silakan cek email Anda untuk link verifikasi.";
+      toast("Email belum diverifikasi. Cek email Anda.");
       if($("resendVerificationBtn")) $("resendVerificationBtn").classList.remove("hidden");
       return;
     }
@@ -416,7 +454,8 @@ async function handleEmailLogin() {
     }
 
   } catch (error) {
-    $("loginMsg").textContent = "Login gagal: " + error.message;
+    $("loginMsg").textContent = "⚠️ Login gagal: " + error.message;
+    toast("Login gagal: " + error.message);
   }
 }
 
@@ -428,22 +467,26 @@ async function handleEmailRegister() {
   const confirmPassword = $("registerConfirmPasswordInput").value;
 
   if (!email || !password || !confirmPassword) {
-    $("loginMsg").textContent = "Email, password, dan konfirmasi password wajib diisi.";
+    $("loginMsg").textContent = "⚠️ Email, password, dan konfirmasi password wajib diisi.";
+    toast("Semua field wajib diisi");
     return;
   }
 
   if (password.length < 6) {
-    $("loginMsg").textContent = "Password minimal 6 karakter.";
+    $("loginMsg").textContent = "⚠️ Password minimal 6 karakter.";
+    toast("Password minimal 6 karakter");
     return;
   }
 
   if (password !== confirmPassword) {
-    $("loginMsg").textContent = "Konfirmasi password tidak cocok.";
+    $("loginMsg").textContent = "⚠️ Konfirmasi password tidak cocok.";
+    toast("Konfirmasi password tidak cocok");
     return;
   }
 
   if (!useSupabase || !supabase) {
-    $("loginMsg").textContent = "Supabase tidak dikonfigurasi. Gunakan login PIN.";
+    $("loginMsg").textContent = "⚠️ Supabase belum dikonfigurasi. Gunakan login PIN (1234).";
+    toast("Supabase belum dikonfigurasi");
     return;
   }
 
@@ -453,7 +496,16 @@ async function handleEmailRegister() {
       password: password
     });
 
-    if (error) throw error;
+    if (error) {
+      const msg = error.message.includes('already registered')
+        ? "Email sudah terdaftar. Silakan login."
+        : error.message.includes('rate limit')
+        ? "Terlalu banyak percobaan. Tunggu beberapa saat."
+        : error.message;
+      $("loginMsg").textContent = "⚠️ " + msg;
+      toast(msg);
+      return;
+    }
 
     // Check if email confirmation is required
     if (data.user && !data.session) {
@@ -468,7 +520,8 @@ async function handleEmailRegister() {
     }
 
   } catch (error) {
-    $("loginMsg").textContent = "Registrasi gagal: " + error.message;
+    $("loginMsg").textContent = "⚠️ Registrasi gagal: " + error.message;
+    toast("Registrasi gagal: " + error.message);
   }
 }
 
