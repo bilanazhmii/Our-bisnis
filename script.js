@@ -307,6 +307,7 @@ function boot(){
  $("emailTab").onclick=()=>showLoginTab("email");
  $("emailLoginBtn").onclick=handleEmailLogin;
  $("registerBtn").onclick=handleEmailRegister;
+ if($("resendVerificationBtn")) $("resendVerificationBtn").onclick=handleResendVerification;
 
  // Admin dashboard functionality (only if elements exist)
  if($("userSearch")) $("userSearch").oninput=loadUsers;
@@ -325,6 +326,8 @@ function showLoginTab(tab) {
     $("emailLogin").classList.remove("hidden");
     $("pinLogin").classList.add("hidden");
   }
+  // Hide resend verification button when switching tabs
+  if($("resendVerificationBtn")) $("resendVerificationBtn").classList.add("hidden");
 }
 
 async function handleEmailLogin() {
@@ -352,6 +355,7 @@ async function handleEmailLogin() {
     // Check email verification
     if (!data.user.email_confirmed_at) {
       $("loginMsg").textContent = "Email belum diverifikasi. Silakan cek email Anda untuk link verifikasi.";
+      $("resendVerificationBtn").classList.remove("hidden");
       return;
     }
 
@@ -409,6 +413,7 @@ async function handleEmailRegister() {
     // Check if email confirmation is required
     if (data.user && !data.session) {
       toast("Registrasi berhasil! Silakan cek email untuk verifikasi sebelum login.");
+      $("resendVerificationBtn").classList.remove("hidden");
     } else if (data.user && data.session) {
       // Auto login if email confirmation is disabled (not recommended)
       sessionStorage.setItem("adminLogin","1");
@@ -419,6 +424,46 @@ async function handleEmailRegister() {
 
   } catch (error) {
     $("loginMsg").textContent = "Registrasi gagal: " + error.message;
+  }
+}
+
+async function handleResendVerification() {
+  const email = $("emailInput").value.trim();
+
+  if (!email) {
+    $("loginMsg").textContent = "Masukkan email terlebih dahulu.";
+    return;
+  }
+
+  if (!useSupabase || !supabase) {
+    $("loginMsg").textContent = "Supabase tidak dikonfigurasi.";
+    return;
+  }
+
+  try {
+    // Show loading state
+    const originalText = $("resendVerificationBtn").textContent;
+    $("resendVerificationBtn").textContent = "Mengirim...";
+    $("resendVerificationBtn").disabled = true;
+
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email
+    });
+
+    // Reset button state
+    $("resendVerificationBtn").textContent = originalText;
+    $("resendVerificationBtn").disabled = false;
+
+    if (error) throw error;
+
+    toast("Email verifikasi berhasil dikirim ulang! Silakan cek inbox email Anda.");
+    $("loginMsg").textContent = "";
+
+  } catch (error) {
+    $("loginMsg").textContent = "Gagal mengirim email verifikasi: " + error.message;
+    $("resendVerificationBtn").textContent = "📧 Kirim Ulang Verifikasi Email";
+    $("resendVerificationBtn").disabled = false;
   }
 }
 function login(){
@@ -446,6 +491,9 @@ function login(){
   } else {
     $("loginMsg").textContent="PIN salah.";
   }
+
+  // Hide resend verification button on PIN login
+  if($("resendVerificationBtn")) $("resendVerificationBtn").classList.add("hidden");
 }
 
 async function handleSupabaseLogout() {
@@ -473,6 +521,9 @@ function showApp(){
       el.classList.remove('visible');
     }
   });
+
+  // Hide resend verification button when app is shown
+  if($("resendVerificationBtn")) $("resendVerificationBtn").classList.add("hidden");
 
   renderAll();
 }

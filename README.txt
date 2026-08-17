@@ -4,6 +4,7 @@ Fitur:
 - Login admin (PIN awal 1234)
 - Login dengan email (Supabase) untuk sinkronisasi data antar perangkat
 - Email verification wajib untuk keamanan
+- Kirim ulang email verifikasi jika tidak diterima
 - Sistem role (User, Admin, Super Admin)
 - Admin Dashboard untuk manajemen user dan role
 - Dashboard penjualan harian
@@ -19,6 +20,7 @@ Fitur:
 - Ganti PIN
 - Sinkronisasi data cloud dengan Supabase
 - Row Level Security (RLS) untuk isolasi data per user
+- SMTP configuration support untuk production email
 - PWA: dapat di-install di Windows/Android/iPhone jika di-host melalui HTTPS
 
 Catatan:
@@ -38,8 +40,16 @@ Setup Supabase (Opsional - untuk sinkronisasi data):
 2. Copy config.example.js ke config.js dan isi dengan kredensial Supabase.
 3. Uncomment script config.js di index.html.
 4. Buat tabel database di Supabase sesuai panduan.
-5. Setup admin pertama dengan menjalankan SQL untuk mengubah role.
-6. Gunakan login email untuk sinkronisasi data antar perangkat.
+5. Configure email/SMTP di Supabase Dashboard untuk email verification.
+6. Setup admin pertama dengan menjalankan SQL untuk mengubah role.
+7. Gunakan login email untuk sinkronisasi data antar perangkat.
+
+Email Verification:
+- Email verification WAJIB di-enable untuk keamanan
+- Configure SMTP di Supabase Dashboard (Authentication → Settings → SMTP Settings)
+- Untuk development: gunakan Supabase built-in email service
+- Untuk production: gunakan SendGrid atau custom SMTP
+- Tombol "Kirim Ulang Verifikasi Email" tersedia jika email tidak diterima
 
 Admin Dashboard:
 - Hanya user dengan role Admin/Super Admin yang bisa akses

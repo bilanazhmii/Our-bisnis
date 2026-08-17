@@ -228,8 +228,21 @@ CREATE TRIGGER on_auth_user_created
    - Klik "Save"
 4. Configure email settings (SMTP) untuk production:
    - Masuk ke **Authentication** → **Settings** → **SMTP Settings**
-   - Setup SMTP provider (SendGrid, Mailgun, dll)
-   - Atau gunakan Supabase built-in email untuk development
+   - **Untuk Development**: Gunakan Supabase built-in email service (default)
+   - **Untuk Production**: Setup SMTP provider pihak ketiga:
+     - SendGrid (disarankan untuk production)
+     - Mailgun
+     - Amazon SES
+     - SMTP custom lainnya
+5. Jika menggunakan custom SMTP, isi konfigurasi berikut:
+   - SMTP Host
+   - SMTP Port
+   - SMTP Username
+   - SMTP Password
+   - Sender Email
+   - Sender Name
+
+**Catatan**: Konfigurasi SMTP dilakukan langsung di Supabase Dashboard, tidak perlu di file .env atau config.js.
 
 ## Langkah 6: Setup Admin User Pertama
 
@@ -250,7 +263,36 @@ WHERE email = 'your-email@example.com';
 
 6. User tersebut sekarang memiliki akses admin dashboard
 
-## Langkah 7: Testing
+## Langkah 7: Testing Email Verification
+
+### Test Registrasi dan Email Verification
+1. Buka aplikasi dan masuk ke tab "Email"
+2. Masukkan email valid dan password (minimal 6 karakter)
+3. Klik "Daftar Akun Baru"
+4. Cek email inbox (termasuk spam/junk folder)
+5. Klik link verifikasi di email
+6. Kembali ke aplikasi dan login dengan email dan password
+7. Jika berhasil, Anda akan masuk ke dashboard
+
+### Test Resend Verification Email
+1. Jika email verifikasi tidak diterima:
+   - Masukkan email yang sama di form login
+   - Tombol "📧 Kirim Ulang Verifikasi Email" akan muncul
+   - Klik tombol tersebut untuk request ulang email
+   - Cek inbox email Anda kembali
+
+### Test Login dengan Email Terverifikasi
+1. Setelah email diverifikasi, login dengan email dan password
+2. Anda akan masuk ke dashboard aplikasi
+3. Data akan otomatis disinkronisasi dari Supabase
+
+### Test Login dengan Email Belum Diverifikasi
+1. Coba login dengan email yang belum diverifikasi
+2. Akan muncul pesan error: "Email belum diverifikasi"
+3. Tombol resend verification akan muncul
+4. Kirim ulang email verifikasi jika diperlukan
+
+## Langkah 8: Testing Aplikasi
 
 1. Buka aplikasi di browser
 2. Di halaman login, klik tab "Email"
@@ -298,6 +340,59 @@ WHERE email = 'your-email@example.com';
 - Pastikan email provider sudah enabled di Supabase
 - Cek apakah email confirmation di-enable (perlu verifikasi email)
 - Pastikan password memenuhi requirement (minimal 6 karakter)
+- Cek apakah email verifikasi sudah dikirim (cek spam folder)
+- Gunakan tombol "Kirim Ulang Verifikasi Email" jika tidak menerima email
+
+### Email verifikasi tidak diterima
+- Cek spam/junk folder di email
+- Pastikan SMTP settings sudah dikonfigurasi di Supabase Dashboard
+- Untuk development, gunakan Supabase built-in email service
+- Untuk production, gunakan SMTP provider seperti SendGrid
+- Request ulang email verifikasi melalui tombol di aplikasi
+- Pastikan email address yang dimasukkan valid dan benar
+
+## Email/SMTP Configuration Guide
+
+### Opsi 1: Supabase Built-in Email (Development)
+- Tidak perlu konfigurasi tambahan
+- Gratis untuk development
+- Limit rate harian
+- Tidak disarankan untuk production
+
+### Opsi 2: SendGrid (Production Recommended)
+1. Buat akun di [SendGrid](https://sendgrid.com)
+2. Dapatkan API Key
+3. Di Supabase Dashboard:
+   - Authentication → Settings → SMTP Settings
+   - Pilih "SendGrid" sebagai provider
+   - Masukkan API Key SendGrid
+   - Configure sender email dan name
+
+### Opsi 3: Custom SMTP
+1. Gunakan SMTP provider apapun (Mailgun, Amazon SES, dll)
+2. Di Supabase Dashboard:
+   - Authentication → Settings → SMTP Settings
+   - Pilih "Custom SMTP"
+   - Masukkan konfigurasi SMTP Anda:
+     - Host: smtp.provider.com
+     - Port: 587 (TLS) atau 465 (SSL)
+     - Username: username@provider.com
+     - Password: password/SMTP key
+     - Sender Email: noreply@yourdomain.com
+     - Sender Name: Your App Name
+
+### Environment Variables
+Untuk custom SMTP, Anda bisa menambahkan konfigurasi di file `.env` (opsional):
+```env
+SMTP_HOST=smtp.sendgrid.net
+SMTP_PORT=587
+SMTP_USER=apikey
+SMTP_PASSWORD=your-smtp-password
+SMTP_SENDER_NAME=Your App Name
+SMTP_SENDER_EMAIL=noreply@yourdomain.com
+```
+
+**Catatan**: Konfigurasi SMTP utama dilakukan di Supabase Dashboard, environment variables hanya untuk reference.
 
 ## Security Notes
 
@@ -328,6 +423,9 @@ Untuk deployment ke production:
 - ✅ Email verification wajib untuk keamanan
 - ✅ Role-based access control
 - ✅ Manajemen role user oleh super admin
+- ✅ Kirim ulang email verifikasi (resend verification)
+- ✅ SMTP configuration support untuk production
+- ✅ Multiple email provider options (Supabase built-in, SendGrid, Custom SMTP)
 
 ## Sistem Role dan Admin
 
@@ -357,3 +455,5 @@ UPDATE user_roles SET role = 'super_admin' WHERE email = 'your-email@example.com
 - User tidak bisa login sebelum email diverifikasi
 - Mencegah registrasi spam dan fake accounts
 - Pastikan SMTP settings di Supabase sudah dikonfigurasi
+- Tombol "Kirim Ulang Verifikasi Email" tersedia jika email tidak diterima
+- User bisa request ulang email verifikasi kapan saja

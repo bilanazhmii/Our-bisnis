@@ -7,3 +7,11 @@ window.SUPABASE_ANON_KEY = 'your-anon-key-here';
 
 // Opsional: Service role key untuk admin operations
 // window.SUPABASE_SERVICE_ROLE_KEY = 'your-service-role-key-here';
+
+// Email/SMTP Configuration
+// Configure SMTP di Supabase Dashboard: Authentication → Settings → SMTP Settings
+// Default: Supabase built-in email service (untuk development)
+// Production: Gunakan SMTP provider seperti SendGrid, Mailgun, dll
+//
+// Tidak perlu konfigurasi SMTP di sini untuk Supabase built-in service
+// SMTP configuration dilakukan langsung di Supabase Dashboard
