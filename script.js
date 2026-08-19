@@ -1,7 +1,20 @@
 const $ = function(id) { return document.getElementById(id); };
 const KEY = "kopiTutugDataV2";
+const BRAND = { name: "El Matcha × el kopi", tagline: "Matcha, kopi, dan cerita baik" };
 const PENDING_DELETES_KEY = KEY + "PendingDeletes";
-const today = function() { return new Date().toISOString().slice(0, 10); };
+const today = function() {
+  var d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+};
+function validDate(value) { return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")); }
+function numberValue(value, fallback) {
+  var n = Number(value);
+  return Number.isFinite(n) ? n : (fallback || 0);
+}
+function integerValue(value, fallback) {
+  var n = Math.floor(numberValue(value, fallback));
+  return n >= 0 ? n : 0;
+}
 const rupiah = function(n) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -389,7 +402,26 @@ if (!db) {
   localStorage.setItem(KEY, JSON.stringify(db));
 }
 
+if (!db || typeof db !== "object") db = { pin: "1234", products: [], sales: [] };
 if (!db.pin) db.pin = "1234";
+if (!Array.isArray(db.products)) db.products = [];
+if (!Array.isArray(db.sales)) db.sales = [];
+db.products = db.products.filter(function(p) { return p && p.id && String(p.name || "").trim(); }).map(function(p) {
+  return { id: String(p.id), name: String(p.name).trim(), cost: numberValue(p.cost), price: numberValue(p.price), stock: integerValue(p.stock) };
+});
+db.sales = db.sales.filter(function(s) { return s && s.id && validDate(s.date) && String(s.product || "").trim(); }).map(function(s) {
+  var price = numberValue(s.price), qty = integerValue(s.qty), cost = numberValue(s.cost);
+  return { id: String(s.id), date: s.date, productId: s.productId || null, product: String(s.product), price: price, qty: qty, cost: cost, total: price * qty, profit: (price - cost) * qty, createdAt: s.createdAt || null };
+});
+
+function prepareUserData(userId) {
+  var previous = null;
+  try { previous = JSON.parse(sessionStorage.getItem("supabaseUser") || "null"); } catch (error) { previous = null; }
+  if (previous && previous.id && previous.id !== userId) {
+    db = { pin: "1234", products: [], sales: [] };
+    saveLocal();
+  }
+}
 
 function saveLocal() {
   localStorage.setItem(KEY, JSON.stringify(db));
@@ -422,6 +454,8 @@ async function syncToSupabase() {
 
   try {
     var userId = currentUser.id;
+    var deletedSaleIds = pendingDeletes.sales.filter(function(item) { return item.userId === userId; }).map(function(item) { return item.id; });
+    var deletedProductIds = pendingDeletes.products.filter(function(item) { return item.userId === userId; }).map(function(item) { return item.id; });
     var salesToDelete = pendingDeletes.sales.filter(function(item) { return item.userId === userId; });
     var productsToDelete = pendingDeletes.products.filter(function(item) { return item.userId === userId; });
     await Promise.all(salesToDelete.map(function(item) { return supabaseDelete('sales', item.id, accessToken); }));
@@ -429,13 +463,15 @@ async function syncToSupabase() {
     pendingDeletes.sales = pendingDeletes.sales.filter(function(item) { return item.userId !== userId; });
     pendingDeletes.products = pendingDeletes.products.filter(function(item) { return item.userId !== userId; });
     savePendingDeletes();
-    if (db.products.length > 0) {
-      await supabaseUpsert('products', db.products.map(function(p) {
+    var activeProducts = db.products.filter(function(p) { return deletedProductIds.indexOf(p.id) === -1; });
+    var activeSales = db.sales.filter(function(s) { return deletedSaleIds.indexOf(s.id) === -1; });
+    if (activeProducts.length > 0) {
+      await supabaseUpsert('products', activeProducts.map(function(p) {
         return { id: p.id, name: p.name, cost: p.cost, price: p.price, stock: p.stock, user_id: userId };
       }), accessToken);
     }
-    if (db.sales.length > 0) {
-      await supabaseUpsert('sales', db.sales.map(function(s) {
+    if (activeSales.length > 0) {
+      await supabaseUpsert('sales', activeSales.map(function(s) {
         return {
           id: s.id, date: s.date, product_id: s.productId || ("legacy-" + s.id), product: s.product,
           price: s.price, qty: s.qty, cost: s.cost, total: s.total, profit: s.profit, user_id: userId
@@ -459,16 +495,19 @@ async function syncFromSupabase() {
     var products = await supabaseSelect('products', accessToken, userFilter);
     var sales = await supabaseSelect('sales', accessToken, userFilter);
 
+    var userDeletedProducts = pendingDeletes.products.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
+    var userDeletedSales = pendingDeletes.sales.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
     if (Array.isArray(products)) {
-      db.products = products.map(function(p) {
-        return { id: p.id, name: p.name, cost: p.cost, price: p.price, stock: p.stock };
+      db.products = products.filter(function(p) { return userDeletedProducts.indexOf(p.id) === -1; }).map(function(p) {
+        return { id: p.id, name: String(p.name || ""), cost: numberValue(p.cost), price: numberValue(p.price), stock: integerValue(p.stock) };
       });
     }
     if (Array.isArray(sales)) {
-      db.sales = sales.map(function(s) {
+      db.sales = sales.filter(function(s) { return userDeletedSales.indexOf(s.id) === -1; }).map(function(s) {
+        var price = numberValue(s.price), qty = integerValue(s.qty), cost = numberValue(s.cost);
         return {
-          id: s.id, date: s.date, productId: s.product_id, product: s.product,
-          price: s.price, qty: s.qty, cost: s.cost, total: s.total, profit: s.profit
+          id: s.id, date: validDate(s.date) ? s.date : today(), productId: s.product_id, product: String(s.product || ""),
+          price: price, qty: qty, cost: cost, total: price * qty, profit: (price - cost) * qty
         };
       });
     }
@@ -635,11 +674,13 @@ async function restoreSession() {
       return false;
     }
 
+    prepareUserData(user.id);
     currentUser = user;
     sessionStorage.setItem("supabaseUser", JSON.stringify(user));
     await fetchUserRole(user.id);
+    var synced = await syncFromSupabase();
     showApp();
-    await syncFromSupabase();
+    if (!synced) toast("Mode cloud belum tersinkron. Data lokal tetap tersedia.");
     renderAll();
     return true;
   }
@@ -793,15 +834,16 @@ async function handleEmailLogin() {
       return;
     }
 
+    prepareUserData(data.user.id);
     currentUser = data.user;
     sessionStorage.setItem("adminLogin", "1");
     sessionStorage.setItem("supabaseUser", JSON.stringify(data.user));
     sessionStorage.setItem("supabaseAccessToken", data.access_token);
 
     await fetchUserRole(data.user.id);
-    showApp();
 
     var synced = await syncFromSupabase();
+    showApp();
     if (synced) {
       renderAll();
       toast(MSG.successSync);
@@ -980,8 +1022,9 @@ function renderAll() { renderProducts(); fillProductSelect(); renderSales(); ren
 
 function addProduct() {
   if (!$("pName") || !$("pCost") || !$("pPrice") || !$("pStock")) return;
-  var name = $("pName").value.trim(), cost = +$("pCost").value || 0, price = +$("pPrice").value || 0, stock = +$("pStock").value || 0;
+  var name = $("pName").value.trim(), cost = numberValue($("pCost").value), price = numberValue($("pPrice").value), stock = integerValue($("pStock").value);
   if (!name) return toast("Nama barang wajib diisi.");
+  if (cost < 0 || price < 0 || stock < 0) return toast("Harga dan stok tidak boleh negatif.");
   db.products.push({ id: uniqueId(), name: name, cost: cost, price: price, stock: stock });
   save();
   $("pName").value = ""; $("pCost").value = ""; $("pPrice").value = ""; $("pStock").value = "";
@@ -1032,12 +1075,14 @@ function calcSaleTotal() {
 function addSale() {
   if (!$("saleProduct") || !$("salePrice") || !$("saleQty") || !$("saleDate")) return;
   var p = db.products.find(function(x) { return x.id === $("saleProduct").value; });
-  var price = +$("salePrice").value || 0, qty = +$("saleQty").value || 0, date = $("saleDate").value || today();
+  var price = numberValue($("salePrice").value), qty = integerValue($("saleQty").value), date = $("saleDate").value || today();
   if (!p) return toast("Pilih barang.");
+  if (!validDate(date)) return toast("Tanggal transaksi tidak valid.");
+  if (price < 0) return toast("Harga jual tidak boleh negatif.");
   if (qty < 1) return toast("Jumlah minimal 1.");
   if (p.stock < qty) return toast("Stok tidak mencukupi.");
   var newId = uniqueId();
-  db.sales.push({ id: newId, date: date, productId: p.id, product: p.name, price: price, qty: qty, cost: p.cost, total: price * qty, profit: (price - p.cost) * qty });
+  db.sales.push({ id: newId, date: date, createdAt: new Date().toISOString(), productId: p.id, product: p.name, price: price, qty: qty, cost: p.cost, total: price * qty, profit: (price - p.cost) * qty });
   p.stock -= qty;
   save();
   $("saleProduct").value = ""; $("salePrice").value = ""; $("saleQty").value = 1;
@@ -1051,7 +1096,7 @@ function addSale() {
 function renderSales() {
   if (!$("saleSearch") || !$("salesTable")) return;
   var q = $("saleSearch").value.toLowerCase();
-  var rows = db.sales.filter(function(s) { return s.product.toLowerCase().indexOf(q) !== -1; }).slice().reverse();
+  var rows = db.sales.filter(function(s) { return String(s.product || "").toLowerCase().indexOf(q) !== -1; }).slice().reverse();
   $("salesTable").innerHTML = rows.map(function(s, i) {
     return '<tr><td>' + (i + 1) + '</td><td>' + s.date + '</td><td>' + esc(s.product) + '</td><td>' + rupiah(s.price) + '</td><td>' + s.qty + '</td><td>' + rupiah(s.total) + '</td><td><button class="mini" onclick="printReceipt(\'' + s.id + '\')">Struk</button> <button class="mini del" onclick="deleteSale(\'' + s.id + '\')">Hapus</button></td></tr>';
   }).join('') || '<tr><td colspan="7">Belum ada transaksi.</td></tr>';
@@ -1088,7 +1133,7 @@ function renderDashboard() {
   for (var i = 6; i >= 0; i--) {
     var d = new Date(date + "T00:00:00");
     d.setDate(d.getDate() - i);
-    days.push(d.toISOString().slice(0, 10));
+    days.push(d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"));
   }
   var vals = days.map(function(d) { return daySales(d).reduce(function(n, s) { return n + s.total; }, 0); });
   var max = Math.max.apply(null, vals.concat([1]));
@@ -1125,7 +1170,7 @@ function renderReport() {
 function exportCSV() {
   var a = filteredReport();
   var csv = "Tanggal,Barang,Harga,Jumlah,Total,Laba\n" + a.map(function(s) {
-    return [s.date, '"' + s.product.replace(/"/g, '""') + '"', s.price, s.qty, s.total, s.profit].join(",");
+    return [s.date, '"' + String(s.product || "").replace(/"/g, '""') + '"', s.price, s.qty, s.total, s.profit].join(",");
   }).join("\n");
   download(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }), "laporan-penjualan.csv");
 }
@@ -1133,7 +1178,7 @@ function exportCSV() {
 function printReport() {
   if (!$("printArea") || !$("reportFrom") || !$("reportTo")) return;
   var a = filteredReport();
-  $("printArea").innerHTML = '<h1>Laporan Penjualan</h1><p>Periode: ' + ($("reportFrom").value || "-") + ' s/d ' + ($("reportTo").value || "-") + '</p><table><thead><tr><th>Tanggal</th><th>Barang</th><th>Harga</th><th>Jumlah</th><th>Total</th><th>Laba</th></tr></thead><tbody>' + a.map(function(s) {
+  $("printArea").innerHTML = '<div class="print-header"><h1>' + esc(BRAND.name) + '</h1><p>Laporan Penjualan</p></div><p>Periode: ' + esc($("reportFrom").value || "-") + ' s/d ' + esc($("reportTo").value || "-") + '</p><table><thead><tr><th>Tanggal</th><th>Barang</th><th>Harga</th><th>Jumlah</th><th>Total</th><th>Laba</th></tr></thead><tbody>' + a.map(function(s) {
     return '<tr><td>' + s.date + '</td><td>' + esc(s.product) + '</td><td>' + rupiah(s.price) + '</td><td>' + s.qty + '</td><td>' + rupiah(s.total) + '</td><td>' + rupiah(s.profit) + '</td></tr>';
   }).join("") + '</tbody></table><p><b>Total omzet: ' + rupiah(a.reduce(function(n, s) { return n + s.total; }, 0)) + '</b></p>';
   window.print();
@@ -1143,7 +1188,9 @@ function printReceipt(id) {
   if (!$("printArea")) return;
   var s = db.sales.find(function(x) { return x.id === id; });
   if (!s) return;
-  $("printArea").innerHTML = '<h1>Struk Penjualan</h1><p>Kopi Tutug<br>' + s.date + '</p><hr><p>' + esc(s.product) + '<br>' + s.qty + ' x ' + rupiah(s.price) + '</p><h2>Total ' + rupiah(s.total) + '</h2><p>Terima kasih.</p>';
+  var receiptNo = String(s.id || "").slice(-8).toUpperCase();
+  var time = s.createdAt ? esc(new Date(s.createdAt).toLocaleString("id-ID")) : esc(s.date);
+  $("printArea").innerHTML = '<article class="receipt"><header class="receipt-head"><div class="receipt-logo">✦</div><h1>' + esc(BRAND.name) + '</h1><p>' + esc(BRAND.tagline) + '</p></header><div class="receipt-meta"><span>No. ' + esc(receiptNo) + '</span><span>' + esc(time) + '</span></div><table class="receipt-items"><thead><tr><th>Item</th><th>Qty</th><th>Harga</th></tr></thead><tbody><tr><td>' + esc(s.product) + '</td><td>' + integerValue(s.qty) + '</td><td>' + rupiah(s.total) + '</td></tr></tbody></table><div class="receipt-total"><span>Total</span><strong>' + rupiah(s.total) + '</strong></div><footer>Terima kasih sudah berkunjung.<br>Semoga harimu selalu hangat.</footer></article>';
   window.print();
 }
 
@@ -1158,7 +1205,17 @@ function restore() {
   r.onload = function() {
     try {
       var x = JSON.parse(r.result);
-      if (!x.products || !x.sales) throw 0;
+      if (!x || !Array.isArray(x.products) || !Array.isArray(x.sales)) throw 0;
+      var restoredProducts = x.products.map(function(p) {
+        if (!p || !p.id || !String(p.name || "").trim()) throw 0;
+        return { id: String(p.id), name: String(p.name).trim(), cost: numberValue(p.cost), price: numberValue(p.price), stock: integerValue(p.stock) };
+      });
+      var restoredSales = x.sales.map(function(s) {
+        if (!s || !s.id || !validDate(s.date) || !String(s.product || "").trim()) throw 0;
+        var price = numberValue(s.price), qty = integerValue(s.qty), cost = numberValue(s.cost);
+        if (price < 0 || qty < 1 || cost < 0) throw 0;
+        return { id: String(s.id), date: s.date, productId: s.productId || null, product: String(s.product), price: price, qty: qty, cost: cost, total: price * qty, profit: (price - cost) * qty, createdAt: s.createdAt || null };
+      });
       if (!confirm("Restore akan mengganti data saat ini. Lanjut?")) return;
       db.products.forEach(function(product) {
         if (!x.products.some(function(restoredProduct) { return restoredProduct.id === product.id; })) queueRemoteDelete("products", product.id);
@@ -1166,7 +1223,7 @@ function restore() {
       db.sales.forEach(function(sale) {
         if (!x.sales.some(function(restoredSale) { return restoredSale.id === sale.id; })) queueRemoteDelete("sales", sale.id);
       });
-      db = x;
+      db = { pin: String(x.pin || db.pin || "1234"), products: restoredProducts, sales: restoredSales };
       save();
       renderAll();
       toast("Restore berhasil.");

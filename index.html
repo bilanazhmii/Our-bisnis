@@ -3,19 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#7a4b24">
-<meta name="description" content="Sistem Data Penjualan Kopi Dan Matcha">
+<meta name="theme-color" content="#65784d">
+<meta name="description" content="Sistem penjualan dan stok El Matcha × el kopi">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.png" type="image/png">
-<title>Data Penjualan</title>
+<title>El Matcha × el kopi</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="loginScreen" class="login-screen">
   <div class="login-card">
     <div class="brand-mark"><img src="icon.png" alt="Logo"></div>
-    <h1>Data Penjualan</h1>
-    <p>Masuk sebagai admin</p>
+    <h1>El Matcha × el kopi</h1>
+    <p>Kelola penjualan dan stok dengan mudah</p>
 
     <div class="login-tabs">
       <button id="loginTab" class="tab-btn active">Login</button>
@@ -50,19 +50,28 @@
 
 <div id="app" class="app hidden">
 <header class="topbar">
-  <div class="brand"><div class="brand-icon"><img src="icon.png" alt="Logo"></div><div><b>Data Penjualan</b><small>Kopi Tutug</small></div></div>
+  <div class="brand"><div class="brand-icon"><img src="icon.png" alt="Logo El Matcha × el kopi"></div><div><b>El Matcha × el kopi</b><small>Penjualan & stok</small></div></div>
   <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
 </header>
 
-<nav id="sideNav" class="side-nav">
-  <button data-page="dashboard" class="nav-btn active"> Dashboard</button>
-  <button data-page="penjualan" class="nav-btn"> Penjualan</button>
-  <button data-page="stok" class="nav-btn"> Stok Barang</button>
-  <button data-page="laporan" class="nav-btn"> Laporan</button>
-  <button data-page="backup" class="nav-btn"> Backup & Restore</button>
-  <button data-page="pengaturan" class="nav-btn"> Pengaturan</button>
-  <button data-page="admin" class="nav-btn admin-only hidden"> Admin Dashboard</button>
-  <button id="logoutBtn" class="nav-btn danger"> Keluar</button>
+<nav id="sideNav" class="side-nav" aria-label="Menu utama">
+  <div class="nav-group">
+    <span class="nav-label">Utama</span>
+    <button data-page="dashboard" class="nav-btn active">⌂ <span>Dashboard</span></button>
+    <button data-page="penjualan" class="nav-btn">＋ <span>Penjualan</span></button>
+    <button data-page="stok" class="nav-btn">▣ <span>Stok Barang</span></button>
+  </div>
+  <div class="nav-group">
+    <span class="nav-label">Insight</span>
+    <button data-page="laporan" class="nav-btn">▤ <span>Laporan</span></button>
+  </div>
+  <div class="nav-group">
+    <span class="nav-label">Sistem</span>
+    <button data-page="backup" class="nav-btn">↥ <span>Backup & Restore</span></button>
+    <button data-page="pengaturan" class="nav-btn">⚙ <span>Pengaturan</span></button>
+    <button data-page="admin" class="nav-btn admin-only hidden">♙ <span>Admin Dashboard</span></button>
+  </div>
+  <button id="logoutBtn" class="nav-btn danger">↪ <span>Keluar</span></button>
 </nav>
 
 <main class="content">
@@ -102,7 +111,7 @@
   <div class="page-head"><div><h1>Stok Barang</h1><p>Kelola barang, modal, harga jual, dan stok.</p></div></div>
   <div class="card">
     <div class="form-grid">
-      <label>Nama barang<input id="pName" placeholder="Kopi Tutug"></label>
+      <label>Nama barang<input id="pName" placeholder="Matcha Latte atau Kopi Susu"></label>
       <label>Harga modal<input id="pCost" type="number" min="0" placeholder="10000"></label>
       <label>Harga jual<input id="pPrice" type="number" min="0" placeholder="15000"></label>
       <label>Stok awal<input id="pStock" type="number" min="0" placeholder="20"></label>

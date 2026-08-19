@@ -1,11 +1,11 @@
 {
-  "name": "Data Penjualan Kopi Tutug",
-  "short_name": "Penjualan",
-  "description": "Aplikasi pencatatan penjualan dan stok",
+  "name": "El Matcha × el kopi",
+  "short_name": "El Matcha × el kopi",
+  "description": "Aplikasi penjualan dan stok El Matcha × el kopi",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#f3f5f7",
-  "theme_color": "#7a4b24",
+  "background_color": "#fbf8f1",
+  "theme_color": "#65784d",
   "orientation": "portrait-primary",
   "icons": [
     {"src":"icon.png","sizes":"512x512","type":"image/png","purpose":"any"},

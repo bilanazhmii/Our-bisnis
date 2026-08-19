@@ -1,4 +1,4 @@
-const CACHE = "kopi-tutug-v7";
+const CACHE = "el-matcha-kopi-v8";
 
 const STATIC_ASSETS = [
   "./",
