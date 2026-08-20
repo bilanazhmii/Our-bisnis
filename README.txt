@@ -77,3 +77,10 @@ Aturan perhitungan penting:
 Migrasi cloud:
 - Jalankan seluruh isi `setup_supabase.sql` pada Supabase SQL Editor. Bagian paling bawah berisi migrasi idempoten untuk tabel `cash_entries`, `receivables`, dan `receivable_payments` serta kolom menu dan pembayaran.
 - Jalankan ulang skrip aman untuk memperbarui instalasi lama tanpa menghapus data yang sudah ada.
+
+
+Pembaruan logika pembayaran:
+
+Jika uang diterima lebih kecil daripada total transaksi, penjualan tetap dicatat dan stok tetap berkurang sesuai barang yang terjual. Sistem hanya mencatat uang yang benar-benar diterima sebagai kas, lalu otomatis membuat piutang sebesar selisih total dikurangi pembayaran. Piutang menyimpan nomor bill, nomor transaksi sumber, tanggal transaksi, nama debitur, jatuh tempo, total tagihan, pembayaran awal, pembayaran lanjutan, metode pembayaran, catatan, dan sisa tagihan.
+
+Nama debitur wajib diisi ketika ada kekurangan pembayaran. Jika pembayaran lebih besar dari total dan metodenya tunai, selisihnya menjadi kembalian dan tidak menjadi omzet maupun piutang. Pembayaran piutang berikutnya menambah kas dan mengurangi saldo piutang, tetapi tidak menggandakan omzet. Nomor bill menggunakan format `INV-YYYYMMDD-001` dan ikut tampil pada riwayat, piutang, struk, laporan, CSV, backup, dan sinkronisasi cloud.

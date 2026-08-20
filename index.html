@@ -94,7 +94,7 @@
 </section>
 
 <section id="penjualan" class="page hidden">
-  <div class="page-head"><div><h1>Penjualan</h1><p>Tanggal aktif cukup dipilih satu kali.</p></div></div>
+  <div class="page-head"><div><h1>Penjualan</h1><p>Catat transaksi, pembayaran, kembalian, dan piutang dalam satu alur.</p></div></div>
   <div class="card">
     <div class="form-grid">
       <label>Tanggal aktif<input id="saleDate" type="date"></label>
@@ -102,17 +102,18 @@
       <label>Harga jual<input id="salePrice" type="number" min="0" step="1" placeholder="15000"></label>
       <label>Jumlah<input id="saleQty" type="number" min="1" step="1" value="1"></label>
       <label>Metode pembayaran<select id="salePaymentMethod"><option value="cash">Tunai</option><option value="transfer">Transfer</option><option value="qris">QRIS</option><option value="debit">Debit</option><option value="credit">Piutang / Belum bayar</option></select></label>
-      <label>Uang diterima<input id="salePaid" type="number" min="0" step="1" placeholder="0"></label>
-      <label>Nama pelanggan / yang berutang<input id="saleCustomer" placeholder="Opsional untuk tunai, wajib untuk piutang"></label>
-      <label>Jatuh tempo<input id="saleDueDate" type="date"></label>
+      <label>Uang diterima / dibayar<input id="salePaid" type="number" min="0" step="1" placeholder="Kosong = lunas"></label>
+      <label>Nama pelanggan / debitur<input id="saleCustomer" placeholder="Wajib jika uang kurang"></label>
+      <label>Jatuh tempo<input id="saleDueDate" type="date" disabled></label>
     </div>
+    <div class="payment-rule"><b>Aturan pembayaran:</b> jika uang diterima kurang dari total, transaksi tetap tersimpan dan kekurangannya otomatis menjadi piutang atas nama debitur.</div>
     <label>Catatan transaksi<textarea id="saleNote" rows="2" placeholder="Contoh: tanpa es, ambil sore, atau keterangan pembayaran"></textarea></label>
-    <div class="sale-preview">Total: <b id="saleTotal">Rp 0</b> <span id="changeInfo"></span> <span id="stockInfo"></span></div>
+    <div class="sale-preview"><span>Total</span><b id="saleTotal">Rp 0</b><span id="changeInfo"></span><span id="stockInfo"></span></div>
     <button id="addSaleBtn" class="primary">+ Simpan Penjualan</button>
   </div>
   <div class="card">
     <div class="toolbar"><h2>Daftar Transaksi</h2><input id="saleSearch" placeholder="Cari barang..."></div>
-    <div class="table-wrap"><table><thead><tr><th>No</th><th>Tanggal</th><th>Barang</th><th>Harga</th><th>Jumlah</th><th>Total</th><th>Pembayaran</th><th>Pelanggan</th><th>Aksi</th></tr></thead><tbody id="salesTable"></tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>No. Bill</th><th>Tanggal</th><th>Barang</th><th>Harga</th><th>Jumlah</th><th>Total</th><th>Pembayaran</th><th>Pelanggan / Debitur</th><th>Aksi</th></tr></thead><tbody id="salesTable"></tbody></table></div>
   </div>
 </section>
 
@@ -153,9 +154,9 @@
 </section>
 
 <section id="piutang" class="page hidden">
-  <div class="page-head"><div><h1>Piutang</h1><p>Pantau orang yang berutang, pembayaran sebagian, jatuh tempo, dan sisa tagihan.</p></div></div>
+  <div class="page-head"><div><h1>Piutang</h1><p>Pantau nomor bill, debitur, pembayaran sebagian, jatuh tempo, dan sisa tagihan.</p></div></div>
   <div class="stats"><div class="stat"><span>Total Piutang</span><strong id="receivableTotal">Rp 0</strong></div><div class="stat"><span>Jatuh Tempo</span><strong id="receivableOverdue">Rp 0</strong></div><div class="stat"><span>Jumlah Debitur</span><strong id="receivablePeople">0</strong></div></div>
-  <div class="card"><div class="toolbar"><h2>Daftar Piutang</h2><input id="receivableSearch" placeholder="Cari nama, status, atau catatan..."></div><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Debitur</th><th>Referensi</th><th>Total</th><th>Dibayar</th><th>Sisa</th><th>Jatuh tempo</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="receivablesTable"></tbody></table></div></div>
+  <div class="card"><div class="toolbar"><h2>Daftar Piutang</h2><input id="receivableSearch" placeholder="Cari nama, status, atau catatan..."></div><div class="table-wrap"><table><thead><tr><th>No. Bill</th><th>Tanggal</th><th>Debitur</th><th>Total</th><th>Dibayar</th><th>Sisa</th><th>Jatuh tempo</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="receivablesTable"></tbody></table></div></div>
 </section>
 
 <section id="laporan" class="page hidden">
@@ -177,7 +178,7 @@
     <div class="stat"><span>Kas Bersih</span><strong id="rCashNet">Rp 0</strong></div>
     <div class="stat"><span>Piutang Terbentuk</span><strong id="rReceivable">Rp 0</strong></div>
   </div>
-  <div class="card"><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Barang</th><th>Harga</th><th>Jumlah</th><th>Total</th><th>Laba</th><th>Bayar</th><th>Pelanggan</th><th>Catatan</th></tr></thead><tbody id="reportTable"></tbody></table></div></div>
+  <div class="card"><div class="table-wrap"><table><thead><tr><th>No. Bill</th><th>Tanggal</th><th>Barang</th><th>Harga</th><th>Jumlah</th><th>Total</th><th>Laba</th><th>Bayar</th><th>Sisa</th><th>Pelanggan</th><th>Catatan</th></tr></thead><tbody id="reportTable"></tbody></table></div></div>
 </section>
 
 <section id="backup" class="page hidden">

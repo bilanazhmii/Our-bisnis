@@ -396,3 +396,11 @@ CREATE POLICY "Users can view own receivable payments" ON public.receivable_paym
 CREATE POLICY "Users can insert own receivable payments" ON public.receivable_payments FOR INSERT WITH CHECK (auth.uid()::text = user_id);
 CREATE POLICY "Users can update own receivable payments" ON public.receivable_payments FOR UPDATE USING (auth.uid()::text = user_id OR public.is_admin()) WITH CHECK (auth.uid()::text = user_id OR public.is_admin());
 CREATE POLICY "Users can delete own receivable payments" ON public.receivable_payments FOR DELETE USING (auth.uid()::text = user_id OR public.is_admin());
+
+
+-- Automatic underpayment receivable metadata
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS bill_no TEXT;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS tendered_amount NUMERIC DEFAULT 0;
+ALTER TABLE public.receivables ADD COLUMN IF NOT EXISTS bill_no TEXT;
+CREATE INDEX IF NOT EXISTS sales_user_id_bill_no_idx ON public.sales (user_id, bill_no);
+CREATE INDEX IF NOT EXISTS receivables_user_id_bill_no_idx ON public.receivables (user_id, bill_no);

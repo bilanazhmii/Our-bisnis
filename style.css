@@ -9,3 +9,14 @@ small{display:block;color:var(--muted,#777);font-size:.78em;margin-top:3px;line-
 .card .toolbar{gap:12px}.card .toolbar input{min-width:220px}
 .table-wrap td small{white-space:normal}.sale-preview{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 @media(max-width:720px){.form-grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.card .toolbar{align-items:stretch;flex-direction:column}.card .toolbar input{min-width:0;width:100%}.table-wrap{overflow-x:auto}.table-wrap table{min-width:760px}}
+
+
+/* Payment and receivable UX refinement */
+.payment-rule{margin:14px 0;padding:12px 14px;border:1px solid #e6c98e;border-left:4px solid #c38b2c;border-radius:12px;background:#fff9eb;color:#674b1d;font-size:.92rem;line-height:1.5}
+.sale-preview{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:16px 0;padding:14px 16px;border-radius:14px;background:linear-gradient(135deg,#f7f8f0,#fffdf8);border:1px solid #e8e5d9;font-size:.95rem}
+.sale-preview b{font-size:1.25rem;color:var(--ink,#253027);margin-right:8px}.sale-preview span{color:var(--muted,#777)}
+.sale-preview #changeInfo{font-weight:700}.sale-preview #stockInfo{padding-left:10px;border-left:1px solid #ddd7ca}
+.table-wrap td>b{font-weight:750;letter-spacing:.01em}.table-wrap td small{margin-top:4px;color:#777;line-height:1.35}.table-wrap td .mini{white-space:nowrap}
+.form-grid label{font-weight:650}.form-grid label input,.form-grid label select{margin-top:7px}
+.page-head p{max-width:720px;line-height:1.5}.toolbar h2{margin-right:auto}
+@media(max-width:720px){.payment-rule{font-size:.86rem}.sale-preview{align-items:flex-start;flex-direction:column;gap:6px}.sale-preview #stockInfo{padding-left:0;border-left:0}.form-grid{gap:12px}.card{padding:16px}.page-head h1{font-size:1.55rem}}
