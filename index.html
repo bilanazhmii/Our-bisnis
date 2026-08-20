@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#65784d">
-<meta name="description" content="Sistem penjualan dan stok El Matcha × el kopi">
+<meta name="description" content="POS, menu, penjualan, kas masuk-keluar, stok, dan piutang El Matcha × el kopi">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.png" type="image/png">
 <title>El Matcha × el kopi</title>
@@ -15,7 +15,7 @@
   <div class="login-card">
     <div class="brand-mark"><img src="icon.png" alt="Logo"></div>
     <h1>El Matcha × el kopi</h1>
-    <p>Kelola penjualan dan stok dengan mudah</p>
+    <p>Kelola menu, penjualan, kas, stok, dan piutang dengan mudah</p>
 
     <div class="login-tabs">
       <button id="loginTab" class="tab-btn active">Login</button>
@@ -50,7 +50,7 @@
 
 <div id="app" class="app hidden">
 <header class="topbar">
-  <div class="brand"><div class="brand-icon"><img src="icon.png" alt="Logo El Matcha × el kopi"></div><div><b>El Matcha × el kopi</b><small>Penjualan & stok</small></div></div>
+  <div class="brand"><div class="brand-icon"><img src="icon.png" alt="Logo El Matcha × el kopi"></div><div><b>El Matcha × el kopi</b><small>POS · kas · stok · piutang</small></div></div>
   <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
 </header>
 
@@ -59,7 +59,9 @@
     <span class="nav-label">Utama</span>
     <button data-page="dashboard" class="nav-btn active">⌂ <span>Dashboard</span></button>
     <button data-page="penjualan" class="nav-btn">＋ <span>Penjualan</span></button>
-    <button data-page="stok" class="nav-btn">▣ <span>Stok Barang</span></button>
+    <button data-page="stok" class="nav-btn">▣ <span>Menu & Stok</span></button>
+    <button data-page="kas" class="nav-btn">◈ <span>Kas Masuk/Keluar</span></button>
+    <button data-page="piutang" class="nav-btn">◎ <span>Piutang</span></button>
   </div>
   <div class="nav-group">
     <span class="nav-label">Insight</span>
@@ -82,6 +84,8 @@
     <div class="stat"><span>Barang Terjual</span><strong id="sItems">0</strong></div>
     <div class="stat"><span>Omzet</span><strong id="sRevenue">Rp 0</strong></div>
     <div class="stat"><span>Laba Kotor</span><strong id="sProfit">Rp 0</strong></div>
+    <div class="stat"><span>Kas Bersih</span><strong id="sCashNet">Rp 0</strong></div>
+    <div class="stat"><span>Piutang Aktif</span><strong id="sReceivable">Rp 0</strong></div>
   </div>
   <div class="grid-2">
     <div class="card"><h2>Penjualan 7 Hari</h2><div id="weeklyChart" class="chart"></div></div>
@@ -97,13 +101,18 @@
       <label>Barang<select id="saleProduct"></select></label>
       <label>Harga jual<input id="salePrice" type="number" min="0" step="1" placeholder="15000"></label>
       <label>Jumlah<input id="saleQty" type="number" min="1" step="1" value="1"></label>
+      <label>Metode pembayaran<select id="salePaymentMethod"><option value="cash">Tunai</option><option value="transfer">Transfer</option><option value="qris">QRIS</option><option value="debit">Debit</option><option value="credit">Piutang / Belum bayar</option></select></label>
+      <label>Uang diterima<input id="salePaid" type="number" min="0" step="1" placeholder="0"></label>
+      <label>Nama pelanggan / yang berutang<input id="saleCustomer" placeholder="Opsional untuk tunai, wajib untuk piutang"></label>
+      <label>Jatuh tempo<input id="saleDueDate" type="date"></label>
     </div>
-    <div class="sale-preview">Total: <b id="saleTotal">Rp 0</b> <span id="stockInfo"></span></div>
-    <button id="addSaleBtn" class="primary">+ Tambah Penjualan</button>
+    <label>Catatan transaksi<textarea id="saleNote" rows="2" placeholder="Contoh: tanpa es, ambil sore, atau keterangan pembayaran"></textarea></label>
+    <div class="sale-preview">Total: <b id="saleTotal">Rp 0</b> <span id="changeInfo"></span> <span id="stockInfo"></span></div>
+    <button id="addSaleBtn" class="primary">+ Simpan Penjualan</button>
   </div>
   <div class="card">
     <div class="toolbar"><h2>Daftar Transaksi</h2><input id="saleSearch" placeholder="Cari barang..."></div>
-    <div class="table-wrap"><table><thead><tr><th>No</th><th>Tanggal</th><th>Barang</th><th>Harga</th><th>Jumlah</th><th>Total</th><th>Aksi</th></tr></thead><tbody id="salesTable"></tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>No</th><th>Tanggal</th><th>Barang</th><th>Harga</th><th>Jumlah</th><th>Total</th><th>Pembayaran</th><th>Pelanggan</th><th>Aksi</th></tr></thead><tbody id="salesTable"></tbody></table></div>
   </div>
 </section>
 
@@ -111,14 +120,42 @@
   <div class="page-head"><div><h1>Stok Barang</h1><p>Kelola barang, modal, harga jual, dan stok.</p></div></div>
   <div class="card">
     <div class="form-grid">
-      <label>Nama barang<input id="pName" placeholder="Matcha Latte atau Kopi Susu"></label>
+      <label>Nama menu/barang<input id="pName" placeholder="Matcha Latte atau Kopi Susu"></label>
+      <label>Kategori<input id="pCategory" placeholder="Minuman, makanan, snack"></label>
+      <label>Satuan<input id="pUnit" placeholder="pcs, gelas, porsi" value="pcs"></label>
       <label>Harga modal<input id="pCost" type="number" min="0" placeholder="10000"></label>
       <label>Harga jual<input id="pPrice" type="number" min="0" placeholder="15000"></label>
       <label>Stok awal<input id="pStock" type="number" min="0" placeholder="20"></label>
+      <label>Stok minimum<input id="pMinStock" type="number" min="0" placeholder="5"></label>
     </div>
-    <button id="addProductBtn" class="primary">+ Tambah Barang</button>
+    <label>Catatan menu<textarea id="pNote" rows="2" placeholder="Komposisi, ukuran, atau catatan penyajian"></textarea></label>
+    <button id="addProductBtn" class="primary">+ Tambah Menu</button>
   </div>
-  <div class="card"><div class="table-wrap"><table><thead><tr><th>Barang</th><th>Modal</th><th>Jual</th><th>Stok</th><th>Aksi</th></tr></thead><tbody id="productsTable"></tbody></table></div></div>
+  <div class="card"><div class="toolbar"><h2>Daftar Menu & Stok</h2><input id="productSearch" placeholder="Cari menu atau kategori..."></div><div class="table-wrap"><table><thead><tr><th>Menu</th><th>Kategori</th><th>Modal</th><th>Jual</th><th>Stok</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="productsTable"></tbody></table></div></div>
+</section>
+
+<section id="kas" class="page hidden">
+  <div class="page-head"><div><h1>Kas Masuk / Keluar</h1><p>Catat uang yang benar-benar masuk atau keluar dari kas usaha.</p></div></div>
+  <div class="card">
+    <div class="form-grid">
+      <label>Tanggal<input id="cashDate" type="date"></label>
+      <label>Jenis<select id="cashType"><option value="in">Uang masuk</option><option value="out">Uang keluar</option></select></label>
+      <label>Kategori<input id="cashCategory" placeholder="Modal, operasional, belanja stok"></label>
+      <label>Nominal<input id="cashAmount" type="number" min="0" step="1" placeholder="50000"></label>
+      <label>Dari / kepada<input id="cashParty" placeholder="Nama orang, pemasok, atau sumber"></label>
+      <label>Referensi<input id="cashReference" placeholder="Nota, transfer, atau nomor bukti"></label>
+    </div>
+    <label>Catatan<textarea id="cashNote" rows="2" placeholder="Keterangan uang masuk atau keluar"></textarea></label>
+    <button id="addCashBtn" class="primary">+ Simpan Catatan Kas</button>
+  </div>
+  <div class="stats"><div class="stat"><span>Kas Masuk Periode</span><strong id="cashInTotal">Rp 0</strong></div><div class="stat"><span>Kas Keluar Periode</span><strong id="cashOutTotal">Rp 0</strong></div><div class="stat"><span>Kas Bersih Periode</span><strong id="cashNetTotal">Rp 0</strong></div></div>
+  <div class="card"><div class="toolbar"><h2>Riwayat Kas</h2><input id="cashSearch" placeholder="Cari kategori, pihak, atau catatan..."></div><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Jenis</th><th>Kategori</th><th>Pihak</th><th>Nominal</th><th>Catatan</th><th>Aksi</th></tr></thead><tbody id="cashTable"></tbody></table></div></div>
+</section>
+
+<section id="piutang" class="page hidden">
+  <div class="page-head"><div><h1>Piutang</h1><p>Pantau orang yang berutang, pembayaran sebagian, jatuh tempo, dan sisa tagihan.</p></div></div>
+  <div class="stats"><div class="stat"><span>Total Piutang</span><strong id="receivableTotal">Rp 0</strong></div><div class="stat"><span>Jatuh Tempo</span><strong id="receivableOverdue">Rp 0</strong></div><div class="stat"><span>Jumlah Debitur</span><strong id="receivablePeople">0</strong></div></div>
+  <div class="card"><div class="toolbar"><h2>Daftar Piutang</h2><input id="receivableSearch" placeholder="Cari nama, status, atau catatan..."></div><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Debitur</th><th>Referensi</th><th>Total</th><th>Dibayar</th><th>Sisa</th><th>Jatuh tempo</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="receivablesTable"></tbody></table></div></div>
 </section>
 
 <section id="laporan" class="page hidden">
@@ -135,8 +172,12 @@
     <div class="stat"><span>Barang</span><strong id="rItems">0</strong></div>
     <div class="stat"><span>Omzet</span><strong id="rRevenue">Rp 0</strong></div>
     <div class="stat"><span>Laba Kotor</span><strong id="rProfit">Rp 0</strong></div>
+    <div class="stat"><span>Kas Masuk</span><strong id="rCashIn">Rp 0</strong></div>
+    <div class="stat"><span>Kas Keluar</span><strong id="rCashOut">Rp 0</strong></div>
+    <div class="stat"><span>Kas Bersih</span><strong id="rCashNet">Rp 0</strong></div>
+    <div class="stat"><span>Piutang Terbentuk</span><strong id="rReceivable">Rp 0</strong></div>
   </div>
-  <div class="card"><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Barang</th><th>Harga</th><th>Jumlah</th><th>Total</th><th>Laba</th></tr></thead><tbody id="reportTable"></tbody></table></div></div>
+  <div class="card"><div class="table-wrap"><table><thead><tr><th>Tanggal</th><th>Barang</th><th>Harga</th><th>Jumlah</th><th>Total</th><th>Laba</th><th>Bayar</th><th>Pelanggan</th><th>Catatan</th></tr></thead><tbody id="reportTable"></tbody></table></div></div>
 </section>
 
 <section id="backup" class="page hidden">

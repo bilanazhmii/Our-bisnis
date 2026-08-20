@@ -287,3 +287,112 @@ CREATE TRIGGER on_auth_user_created
 -- SELECT * FROM user_roles;
 -- SELECT * FROM products;
 -- SELECT * FROM sales;
+
+
+-- ============================================
+-- MODUL BISNIS: MENU, PEMBAYARAN, KAS, PIUTANG
+-- Jalankan bagian ini pada instalasi lama maupun baru.
+-- ============================================
+
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Umum';
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS unit TEXT DEFAULT 'pcs';
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS min_stock INTEGER DEFAULT 0;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';
+
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS discount NUMERIC DEFAULT 0;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'cash';
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS paid_amount NUMERIC DEFAULT 0;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS change_amount NUMERIC DEFAULT 0;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS customer TEXT DEFAULT '';
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS due_date TEXT;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS receivable_id TEXT;
+
+CREATE TABLE IF NOT EXISTS public.cash_entries (
+  id TEXT PRIMARY KEY,
+  date TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'in',
+  category TEXT NOT NULL DEFAULT 'Lainnya',
+  amount NUMERIC NOT NULL DEFAULT 0,
+  party TEXT DEFAULT '',
+  reference TEXT DEFAULT '',
+  note TEXT DEFAULT '',
+  source TEXT NOT NULL DEFAULT 'manual',
+  source_id TEXT,
+  user_id TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT cash_entries_type CHECK (type IN ('in', 'out')),
+  CONSTRAINT cash_entries_amount CHECK (amount >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS public.receivables (
+  id TEXT PRIMARY KEY,
+  sale_id TEXT,
+  date TEXT NOT NULL,
+  customer TEXT NOT NULL,
+  due_date TEXT,
+  total NUMERIC NOT NULL DEFAULT 0,
+  note TEXT DEFAULT '',
+  user_id TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT receivables_total CHECK (total >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS public.receivable_payments (
+  id TEXT PRIMARY KEY,
+  receivable_id TEXT NOT NULL,
+  date TEXT NOT NULL,
+  amount NUMERIC NOT NULL DEFAULT 0,
+  method TEXT NOT NULL DEFAULT 'cash',
+  note TEXT DEFAULT '',
+  user_id TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  CONSTRAINT receivable_payments_amount CHECK (amount > 0)
+);
+
+CREATE INDEX IF NOT EXISTS cash_entries_user_id_date_idx ON public.cash_entries (user_id, date);
+CREATE INDEX IF NOT EXISTS cash_entries_user_id_source_idx ON public.cash_entries (user_id, source, source_id);
+CREATE INDEX IF NOT EXISTS receivables_user_id_due_date_idx ON public.receivables (user_id, due_date);
+CREATE INDEX IF NOT EXISTS receivable_payments_user_id_receivable_idx ON public.receivable_payments (user_id, receivable_id);
+
+DROP TRIGGER IF EXISTS cash_entries_set_updated_at ON public.cash_entries;
+CREATE TRIGGER cash_entries_set_updated_at BEFORE UPDATE ON public.cash_entries FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+DROP TRIGGER IF EXISTS receivables_set_updated_at ON public.receivables;
+CREATE TRIGGER receivables_set_updated_at BEFORE UPDATE ON public.receivables FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+DROP TRIGGER IF EXISTS receivable_payments_set_updated_at ON public.receivable_payments;
+CREATE TRIGGER receivable_payments_set_updated_at BEFORE UPDATE ON public.receivable_payments FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+ALTER TABLE public.cash_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.receivables ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.receivable_payments ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own cash entries" ON public.cash_entries;
+DROP POLICY IF EXISTS "Users can insert own cash entries" ON public.cash_entries;
+DROP POLICY IF EXISTS "Users can update own cash entries" ON public.cash_entries;
+DROP POLICY IF EXISTS "Users can delete own cash entries" ON public.cash_entries;
+CREATE POLICY "Users can view own cash entries" ON public.cash_entries FOR SELECT USING (auth.uid()::text = user_id OR public.is_admin());
+CREATE POLICY "Users can insert own cash entries" ON public.cash_entries FOR INSERT WITH CHECK (auth.uid()::text = user_id);
+CREATE POLICY "Users can update own cash entries" ON public.cash_entries FOR UPDATE USING (auth.uid()::text = user_id OR public.is_admin()) WITH CHECK (auth.uid()::text = user_id OR public.is_admin());
+CREATE POLICY "Users can delete own cash entries" ON public.cash_entries FOR DELETE USING (auth.uid()::text = user_id OR public.is_admin());
+
+DROP POLICY IF EXISTS "Users can view own receivables" ON public.receivables;
+DROP POLICY IF EXISTS "Users can insert own receivables" ON public.receivables;
+DROP POLICY IF EXISTS "Users can update own receivables" ON public.receivables;
+DROP POLICY IF EXISTS "Users can delete own receivables" ON public.receivables;
+CREATE POLICY "Users can view own receivables" ON public.receivables FOR SELECT USING (auth.uid()::text = user_id OR public.is_admin());
+CREATE POLICY "Users can insert own receivables" ON public.receivables FOR INSERT WITH CHECK (auth.uid()::text = user_id);
+CREATE POLICY "Users can update own receivables" ON public.receivables FOR UPDATE USING (auth.uid()::text = user_id OR public.is_admin()) WITH CHECK (auth.uid()::text = user_id OR public.is_admin());
+CREATE POLICY "Users can delete own receivables" ON public.receivables FOR DELETE USING (auth.uid()::text = user_id OR public.is_admin());
+
+DROP POLICY IF EXISTS "Users can view own receivable payments" ON public.receivable_payments;
+DROP POLICY IF EXISTS "Users can insert own receivable payments" ON public.receivable_payments;
+DROP POLICY IF EXISTS "Users can update own receivable payments" ON public.receivable_payments;
+DROP POLICY IF EXISTS "Users can delete own receivable payments" ON public.receivable_payments;
+CREATE POLICY "Users can view own receivable payments" ON public.receivable_payments FOR SELECT USING (auth.uid()::text = user_id OR public.is_admin());
+CREATE POLICY "Users can insert own receivable payments" ON public.receivable_payments FOR INSERT WITH CHECK (auth.uid()::text = user_id);
+CREATE POLICY "Users can update own receivable payments" ON public.receivable_payments FOR UPDATE USING (auth.uid()::text = user_id OR public.is_admin()) WITH CHECK (auth.uid()::text = user_id OR public.is_admin());
+CREATE POLICY "Users can delete own receivable payments" ON public.receivable_payments FOR DELETE USING (auth.uid()::text = user_id OR public.is_admin());

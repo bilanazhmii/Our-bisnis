@@ -56,3 +56,24 @@ Admin Dashboard:
 - Super Admin bisa mengubah role user lain
 - Melihat statistik user terdaftar
 - Manajemen user system secara centralized
+
+
+Fitur bisnis tambahan:
+- Menu/katalog: kategori, satuan, stok minimum, status aktif, dan catatan menu.
+- Penjualan: metode Tunai, Transfer, QRIS, Debit, atau Piutang; uang diterima; kembalian; nama pelanggan/debitur; jatuh tempo; dan catatan transaksi.
+- Kas masuk/keluar: ledger uang nyata dengan kategori, pihak, referensi, catatan, ringkasan kas masuk, kas keluar, dan kas bersih.
+- Piutang: daftar orang yang berutang, total tagihan, pembayaran parsial, sisa, jatuh tempo, status, pencarian, dan detail cetak.
+- Laporan: omzet, laba kotor, kas masuk, kas keluar, kas bersih, piutang terbentuk, metode pembayaran, pelanggan, serta catatan.
+- Backup dan restore mencakup produk, penjualan, kas, piutang, dan pembayaran piutang.
+
+Aturan perhitungan penting:
+- Total penjualan = harga x jumlah; kembalian = uang diterima - total jika positif.
+- Kembalian tidak mengurangi omzet dan tidak dicatat sebagai biaya.
+- Penjualan kredit menambah omzet dan piutang, tetapi kas hanya bertambah sebesar pembayaran yang benar-benar diterima.
+- Pelunasan piutang menambah kas dan mengurangi sisa piutang tanpa menggandakan omzet.
+- Saldo kas bersih = seluruh kas masuk - seluruh kas keluar pada periode yang dipilih.
+- Penghapusan penjualan mengembalikan stok dan menghapus kas/piutang/pembayaran turunannya.
+
+Migrasi cloud:
+- Jalankan seluruh isi `setup_supabase.sql` pada Supabase SQL Editor. Bagian paling bawah berisi migrasi idempoten untuk tabel `cash_entries`, `receivables`, dan `receivable_payments` serta kolom menu dan pembayaran.
+- Jalankan ulang skrip aman untuk memperbarui instalasi lama tanpa menghapus data yang sudah ada.
