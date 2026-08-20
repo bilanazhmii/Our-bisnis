@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.png" type="image/png">
 <title>El Matcha × el kopi</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=layout3">
 </head>
 <body>
 <div id="loginScreen" class="login-screen">
@@ -95,25 +95,37 @@
 
 <section id="penjualan" class="page hidden">
   <div class="page-head"><div><h1>Penjualan</h1><p>Catat transaksi, pembayaran, kembalian, dan piutang dalam satu alur.</p></div></div>
-  <div class="card">
-    <div class="form-grid">
-      <label>Tanggal aktif<input id="saleDate" type="date"></label>
-      <label>Barang<select id="saleProduct"></select></label>
-      <label>Harga jual<input id="salePrice" type="number" min="0" step="1" placeholder="15000"></label>
-      <label>Jumlah<input id="saleQty" type="number" min="1" step="1" value="1"></label>
-      <label>Metode pembayaran<select id="salePaymentMethod"><option value="cash">Tunai</option><option value="transfer">Transfer</option><option value="qris">QRIS</option><option value="debit">Debit</option><option value="credit">Piutang / Belum bayar</option></select></label>
-      <label>Uang diterima / dibayar<input id="salePaid" type="number" min="0" step="1" placeholder="Kosong = lunas"></label>
-      <label>Nama pelanggan / debitur<input id="saleCustomer" placeholder="Wajib jika uang kurang"></label>
-      <label>Jatuh tempo<input id="saleDueDate" type="date" disabled></label>
+  <div class="card sales-form-card">
+    <div class="card-heading"><div><h2>Transaksi Baru</h2><p class="card-subtitle">Isi detail barang dan pembayaran. Sistem akan menghitung total secara otomatis.</p></div></div>
+    <div class="form-section">
+      <h3>Detail penjualan</h3>
+      <div class="form-grid sales-detail-grid">
+        <label>Tanggal transaksi<input id="saleDate" type="date"></label>
+        <label>Barang<select id="saleProduct"></select></label>
+        <label>Harga jual<input id="salePrice" type="number" min="0" step="1" placeholder="15000"></label>
+        <label>Jumlah<input id="saleQty" type="number" min="1" step="1" value="1"></label>
+      </div>
     </div>
-    <div class="payment-rule"><b>Aturan pembayaran:</b> jika uang diterima kurang dari total, transaksi tetap tersimpan dan kekurangannya otomatis menjadi piutang atas nama debitur.</div>
-    <label>Catatan transaksi<textarea id="saleNote" rows="2" placeholder="Contoh: tanpa es, ambil sore, atau keterangan pembayaran"></textarea></label>
-    <div class="sale-preview"><span>Total</span><b id="saleTotal">Rp 0</b><span id="changeInfo"></span><span id="stockInfo"></span></div>
-    <button id="addSaleBtn" class="primary">+ Simpan Penjualan</button>
+    <div class="form-section payment-section">
+      <h3>Pembayaran</h3>
+      <div class="form-grid payment-grid">
+        <label>Metode pembayaran<select id="salePaymentMethod"><option value="cash">Tunai</option><option value="transfer">Transfer</option><option value="qris">QRIS</option><option value="debit">Debit</option><option value="credit">Piutang / Belum bayar</option></select></label>
+        <label>Uang diterima / dibayar<input id="salePaid" type="number" min="0" step="1" placeholder="Kosong = lunas"></label>
+        <label>Nama pelanggan / debitur<input id="saleCustomer" placeholder="Wajib jika uang kurang"></label>
+        <label>Jatuh tempo<input id="saleDueDate" type="date" disabled></label>
+      </div>
+      <div class="payment-rule"><span class="rule-icon">i</span><div><b>Aturan pembayaran</b><span>Jika uang diterima kurang dari total, transaksi tetap tersimpan dan selisihnya otomatis menjadi piutang atas nama debitur.</span></div></div>
+    </div>
+    <div class="form-section note-section">
+      <h3>Catatan transaksi <small>Opsional</small></h3>
+      <textarea id="saleNote" rows="2" placeholder="Contoh: tanpa es, ambil sore, atau keterangan pembayaran"></textarea>
+    </div>
+    <div class="sale-preview"><div><span>Total transaksi</span><b id="saleTotal">Rp 0</b></div><div id="changeInfo" class="preview-status"></div><div id="stockInfo" class="preview-status"></div></div>
+    <div class="form-actions"><button id="addSaleBtn" class="primary">+ Simpan Penjualan</button></div>
   </div>
-  <div class="card">
-    <div class="toolbar"><h2>Daftar Transaksi</h2><input id="saleSearch" placeholder="Cari barang..."></div>
-    <div class="table-wrap"><table><thead><tr><th>No. Bill</th><th>Tanggal</th><th>Barang</th><th>Harga</th><th>Jumlah</th><th>Total</th><th>Pembayaran</th><th>Pelanggan / Debitur</th><th>Aksi</th></tr></thead><tbody id="salesTable"></tbody></table></div>
+  <div class="card sales-history-card">
+    <div class="toolbar"><div><h2>Riwayat transaksi</h2><p class="card-subtitle">Transaksi dikelompokkan berdasarkan tanggal.</p></div><input id="saleSearch" placeholder="Cari bill, menu, pelanggan..."></div>
+    <div class="table-wrap"><table><thead><tr><th>No. Bill</th><th>Menu</th><th>Qty</th><th>Total</th><th>Pembayaran</th><th>Pelanggan / Debitur</th><th>Aksi</th></tr></thead><tbody id="salesTable"></tbody></table></div>
   </div>
 </section>
 
@@ -228,6 +240,6 @@
 
 <div id="toast" class="toast"></div>
 <div id="printArea"></div>
-<script src="script.js"></script>
+<script src="script.js?v=layout3"></script>
 </body>
 </html>

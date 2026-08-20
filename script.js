@@ -1158,7 +1158,7 @@ function calcSaleTotal() {
     else if (method === "cash" && change > 0) message = "Kembalian: " + rupiah(change);
     else if (rawPaid === "" && method !== "credit") message = "Uang diterima kosong = lunas; jika kurang, otomatis menjadi piutang";
     $('changeInfo').textContent = message;
-    $('changeInfo').className = balance > 0 ? "warning" : "positive";
+    $('changeInfo').className = "preview-status " + (balance > 0 ? "warning" : "positive");
   }
   if ($('salePaymentMethod')) {
     var needsDebtDetails = method === "credit" || balance > 0;
@@ -1201,12 +1201,22 @@ function addSale() {
 
 function renderSales() {
   if (!$("saleSearch") || !$("salesTable")) return;
-  var q = $("saleSearch").value.toLowerCase();
-  var rows = db.sales.filter(function(s) { return String(s.product || "").toLowerCase().indexOf(q) !== -1; }).slice().reverse();
-  $("salesTable").innerHTML = rows.map(function(s) {
-    var balance = saleBalance(s), paymentMeta = salePaymentDisplay(s) + '<small>Dibayar ' + rupiah(s.paidAmount || 0) + (s.changeAmount ? ' · Kembali ' + rupiah(s.changeAmount) : '') + (balance > 0 ? ' · Sisa ' + rupiah(balance) : '') + '</small>';
-    return '<tr><td><b>' + esc(s.billNo || fallbackBillNo(s.date, s.id)) + '</b><small>' + esc(s.date) + '</small></td><td>' + esc(s.date) + '</td><td>' + esc(s.product) + '</td><td>' + rupiah(s.price) + '</td><td>' + s.qty + '</td><td>' + rupiah(s.total) + '</td><td>' + paymentMeta + '</td><td>' + esc(s.customer || '-') + '</td><td><button class="mini" onclick="printReceipt(\'' + s.id + '\')">Struk</button> <button class="mini del" onclick="deleteSale(\'' + s.id + '\')">Hapus</button></td></tr>';
-  }).join('') || '<tr><td colspan="9">Belum ada transaksi.</td></tr>';
+  var q = $("saleSearch").value.toLowerCase().trim(), groups = {};
+  db.sales.filter(function(s) {
+    var haystack = [s.billNo, s.date, s.product, s.customer, s.note].join(" ").toLowerCase();
+    return !q || haystack.indexOf(q) !== -1;
+  }).forEach(function(s) { if (!groups[s.date]) groups[s.date] = []; groups[s.date].push(s); });
+  var dates = Object.keys(groups).sort().reverse(), html = "";
+  dates.forEach(function(date) {
+    var group = groups[date].slice().reverse(), label = date;
+    try { label = new Date(date + "T00:00:00").toLocaleDateString("id-ID", { weekday: "long", day: "2-digit", month: "long", year: "numeric" }); } catch (error) {}
+    html += '<tr class="date-group-row"><td colspan="7"><div class="date-group-heading"><b>' + esc(label) + '</b><span>' + group.length + ' transaksi</span></div></td></tr>';
+    html += group.map(function(s) {
+      var balance = saleBalance(s), paymentMeta = '<div class="payment-cell"><b>' + esc(salePaymentDisplay(s)) + '</b><small>Dibayar ' + rupiah(s.paidAmount || 0) + '</small>' + (s.changeAmount ? '<small>Kembalian ' + rupiah(s.changeAmount) + '</small>' : '') + (balance > 0 ? '<small class="warning">Sisa ' + rupiah(balance) + '</small>' : '') + '</div>';
+      return '<tr><td><b>' + esc(s.billNo || fallbackBillNo(s.date, s.id)) + '</b></td><td><b>' + esc(s.product) + '</b><small>' + rupiah(s.price) + ' / item</small></td><td>' + s.qty + '</td><td><b>' + rupiah(s.total) + '</b></td><td>' + paymentMeta + '</td><td>' + esc(s.customer || '-') + '</td><td><div class="row-actions"><button class="mini" onclick="printReceipt(\'' + s.id + '\')">Struk</button><button class="mini del" onclick="deleteSale(\'' + s.id + '\')">Hapus</button></div></td></tr>';
+    }).join("");
+  });
+  $("salesTable").innerHTML = html || '<tr><td colspan="7" class="empty-state">Belum ada transaksi.</td></tr>';
 }
 
 function deleteSale(id) {
