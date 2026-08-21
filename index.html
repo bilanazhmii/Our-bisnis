@@ -6,14 +6,14 @@
 <meta name="theme-color" content="#65784d">
 <meta name="description" content="POS, menu, penjualan, kas masuk-keluar, stok, dan piutang El Matcha × el kopi">
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon.png" type="image/png">
+<link rel="icon" href="logo-matcha.png" type="image/png">
 <title>El Matcha × el kopi</title>
-<link rel="stylesheet" href="style.css?v=authfix1">
+<link rel="stylesheet" href="style.css?v=matcha2">
 </head>
 <body>
 <div id="loginScreen" class="login-screen">
   <div class="login-card">
-    <div class="brand-mark"><img src="icon.png" alt="Logo"></div>
+    <div class="brand-mark"><img src="logo-matcha.png" alt="Logo"></div>
     <h1>El Matcha × el kopi</h1>
     <p>Kelola menu, penjualan, kas, stok, dan piutang dengan mudah</p>
 
@@ -51,7 +51,7 @@
 
 <div id="app" class="app hidden">
 <header class="topbar">
-  <div class="brand"><div class="brand-icon"><img src="icon.png" alt="Logo El Matcha × el kopi"></div><div><b>El Matcha × el kopi</b><small>POS · kas · stok · piutang</small></div></div>
+  <div class="brand"><div class="brand-icon"><img src="logo-matcha.png" alt="Logo El Matcha × el kopi"></div><div><b>El Matcha × el kopi</b><small>POS · kas · stok · piutang</small></div></div>
   <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
 </header>
 
@@ -113,6 +113,7 @@
         <label>Metode pembayaran<select id="salePaymentMethod"><option value="cash">Tunai</option><option value="transfer">Transfer</option><option value="qris">QRIS</option><option value="debit">Debit</option><option value="credit">Piutang / Belum bayar</option></select></label>
         <label>Uang diterima / dibayar<input id="salePaid" type="number" min="0" step="1" placeholder="Kosong = lunas"></label>
         <label>Nama pelanggan / debitur<input id="saleCustomer" placeholder="Wajib jika uang kurang"></label>
+        <label>Penerima kembalian<input id="changeRecipient" placeholder="Nama orang yang menerima kembalian"></label>
         <label>Jatuh tempo<input id="saleDueDate" type="date" disabled></label>
       </div>
       <div class="payment-rule"><span class="rule-icon">i</span><div><b>Aturan pembayaran</b><span>Jika uang diterima kurang dari total, transaksi tetap tersimpan dan selisihnya otomatis menjadi piutang atas nama debitur.</span></div></div>
@@ -131,6 +132,11 @@
   <div class="card sales-history-card">
     <div class="toolbar"><div><h2>Riwayat transaksi</h2><p class="card-subtitle">Transaksi dikelompokkan berdasarkan tanggal.</p></div><input id="saleSearch" placeholder="Cari bill, menu, pelanggan..."></div>
     <div class="table-wrap"><table><thead><tr><th>No. Bill</th><th>Menu</th><th>Qty</th><th>Total</th><th>Pembayaran</th><th>Pelanggan / Debitur</th><th>Aksi</th></tr></thead><tbody id="salesTable"></tbody></table></div>
+  </div>
+  <div class="card pending-changes-card">
+    <div class="toolbar"><div><h2>Kembalian Belum Diberikan</h2><p class="card-subtitle">Pantau kembalian yang belum diambil atau baru diberikan sebagian.</p></div><input id="changeSearch" placeholder="Cari bill atau nama penerima..."></div>
+    <div class="stats compact-stats"><div class="stat"><span>Sisa kembalian</span><strong id="pendingChangeTotal">Rp 0</strong></div><div class="stat"><span>Orang / transaksi</span><strong id="pendingChangeCount">0</strong></div><div class="stat"><span>Sudah sebagian</span><strong id="partialChangeCount">0</strong></div></div>
+    <div class="table-wrap"><table><thead><tr><th>No. Bill / Tanggal</th><th>Penerima</th><th>Total kembalian</th><th>Sudah diberikan</th><th>Sisa</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="pendingChangesTable"></tbody></table></div>
   </div>
 </section>
 
@@ -248,6 +254,6 @@
 
 <div id="toast" class="toast"></div>
 <div id="printArea"></div>
-<script src="script.js?v=authfix1"></script>
+<script src="script.js?v=matcha2"></script>
 </body>
 </html>

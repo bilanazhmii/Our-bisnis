@@ -454,3 +454,32 @@ WHERE NOT EXISTS (
 );
 
 NOTIFY pgrst, 'reload schema';
+
+
+-- ============================================
+-- CHANGE RETURN LEDGER (IDEMPOTENT)
+-- Tracks change that is still owed or returned in parts.
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.change_returns (
+  id TEXT PRIMARY KEY,
+  sale_id TEXT NOT NULL,
+  bill_no TEXT NOT NULL,
+  date DATE NOT NULL DEFAULT CURRENT_DATE,
+  recipient TEXT NOT NULL DEFAULT '',
+  amount NUMERIC NOT NULL CHECK (amount >= 0),
+  note TEXT NOT NULL DEFAULT '',
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+ALTER TABLE public.change_returns ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS change_returns_user_sale_idx ON public.change_returns (user_id, sale_id);
+CREATE INDEX IF NOT EXISTS change_returns_user_date_idx ON public.change_returns (user_id, date DESC);
+DROP POLICY IF EXISTS "Users can view own change returns" ON public.change_returns;
+DROP POLICY IF EXISTS "Users can insert own change returns" ON public.change_returns;
+DROP POLICY IF EXISTS "Users can update own change returns" ON public.change_returns;
+DROP POLICY IF EXISTS "Users can delete own change returns" ON public.change_returns;
+CREATE POLICY "Users can view own change returns" ON public.change_returns FOR SELECT USING (auth.uid() = user_id OR public.is_admin());
+CREATE POLICY "Users can insert own change returns" ON public.change_returns FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own change returns" ON public.change_returns FOR UPDATE USING (auth.uid() = user_id OR public.is_admin()) WITH CHECK (auth.uid() = user_id OR public.is_admin());
+CREATE POLICY "Users can delete own change returns" ON public.change_returns FOR DELETE USING (auth.uid() = user_id OR public.is_admin());
+NOTIFY pgrst, 'reload schema';

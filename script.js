@@ -72,20 +72,21 @@ function readVerificationNotice() {
 
 verificationNotice = readVerificationNotice();
 var syncQueue = Promise.resolve();
-var pendingDeletes = { products: [], sales: [], cashEntries: [], receivables: [], receivablePayments: [] };
+var pendingDeletes = { products: [], sales: [], cashEntries: [], receivables: [], receivablePayments: [], changeReturns: [] };
 
 try {
-  pendingDeletes = JSON.parse(localStorage.getItem(PENDING_DELETES_KEY) || '{"products":[],"sales":[],"cashEntries":[],"receivables":[],"receivablePayments":[]}');
+  pendingDeletes = JSON.parse(localStorage.getItem(PENDING_DELETES_KEY) || '{"products":[],"sales":[],"cashEntries":[],"receivables":[],"receivablePayments":[],"changeReturns":[]}');
 } catch (error) {
   localStorage.removeItem(PENDING_DELETES_KEY);
 }
 
-if (!pendingDeletes || typeof pendingDeletes !== "object") pendingDeletes = { products: [], sales: [], cashEntries: [], receivables: [], receivablePayments: [] };
+if (!pendingDeletes || typeof pendingDeletes !== "object") pendingDeletes = { products: [], sales: [], cashEntries: [], receivables: [], receivablePayments: [], changeReturns: [] };
 if (!Array.isArray(pendingDeletes.products)) pendingDeletes.products = [];
 if (!Array.isArray(pendingDeletes.sales)) pendingDeletes.sales = [];
 if (!Array.isArray(pendingDeletes.cashEntries)) pendingDeletes.cashEntries = [];
 if (!Array.isArray(pendingDeletes.receivables)) pendingDeletes.receivables = [];
 if (!Array.isArray(pendingDeletes.receivablePayments)) pendingDeletes.receivablePayments = [];
+if (!Array.isArray(pendingDeletes.changeReturns)) pendingDeletes.changeReturns = [];
 
 function hasValidSupabaseConfig(config) {
   return !!(
@@ -391,22 +392,24 @@ if (!Array.isArray(db.sales)) db.sales = [];
 if (!Array.isArray(db.cashEntries)) db.cashEntries = [];
 if (!Array.isArray(db.receivables)) db.receivables = [];
 if (!Array.isArray(db.receivablePayments)) db.receivablePayments = [];
+if (!Array.isArray(db.changeReturns)) db.changeReturns = [];
 db.products = db.products.filter(function(p) { return p && p.id && String(p.name || "").trim(); }).map(function(p) {
     return { id: String(p.id), name: String(p.name).trim(), category: String(p.category || "Umum").trim(), unit: String(p.unit || "pcs").trim(), cost: numberValue(p.cost), price: numberValue(p.price), stock: integerValue(p.stock), minStock: integerValue(p.minStock), active: p.active !== false, note: String(p.note || "") };
 });
 db.sales = db.sales.filter(function(s) { return s && s.id && validDate(s.date) && String(s.product || "").trim(); }).map(function(s) {
   var price = numberValue(s.price), qty = integerValue(s.qty), cost = numberValue(s.cost), total = price * qty, discount = Math.min(total, numberValue(s.discount)), netTotal = total - discount;
-  return { id: String(s.id), date: s.date, billNo: String(s.billNo || fallbackBillNo(s.date, s.id)), productId: s.productId || null, product: String(s.product), price: price, qty: qty, cost: cost, total: netTotal, discount: discount, profit: (price - cost) * qty - discount, paymentMethod: String(s.paymentMethod || "cash"), paidAmount: Math.max(0, Math.min(netTotal, numberValue(s.paidAmount, s.paymentMethod === "credit" ? 0 : netTotal))), tenderedAmount: Math.max(0, numberValue(s.tenderedAmount, s.paidAmount)), changeAmount: Math.max(0, numberValue(s.changeAmount)), customer: String(s.customer || ""), dueDate: validDate(s.dueDate) ? s.dueDate : "", note: String(s.note || ""), receivableId: s.receivableId || null, createdAt: s.createdAt || null };
+  return { id: String(s.id), date: s.date, billNo: String(s.billNo || fallbackBillNo(s.date, s.id)), productId: s.productId || null, product: String(s.product), price: price, qty: qty, cost: cost, total: netTotal, discount: discount, profit: (price - cost) * qty - discount, paymentMethod: String(s.paymentMethod || "cash"), paidAmount: Math.max(0, Math.min(netTotal, numberValue(s.paidAmount, s.paymentMethod === "credit" ? 0 : netTotal))), tenderedAmount: Math.max(0, numberValue(s.tenderedAmount, s.paidAmount)), changeAmount: Math.max(0, numberValue(s.changeAmount)), changeRecipient: String(s.changeRecipient || s.customer || ""), customer: String(s.customer || ""), dueDate: validDate(s.dueDate) ? s.dueDate : "", note: String(s.note || ""), receivableId: s.receivableId || null, createdAt: s.createdAt || null };
 });
 db.cashEntries = db.cashEntries.filter(function(e) { return e && e.id && validDate(e.date); }).map(function(e) { return { id: String(e.id), date: e.date, type: e.type === "out" ? "out" : "in", category: String(e.category || "Lainnya"), amount: Math.max(0, numberValue(e.amount)), party: String(e.party || ""), reference: String(e.reference || ""), note: String(e.note || ""), source: String(e.source || "manual"), sourceId: e.sourceId || null, createdAt: e.createdAt || null }; });
 db.receivables = db.receivables.filter(function(r) { return r && r.id && validDate(r.date) && String(r.customer || "").trim(); }).map(function(r) { return { id: String(r.id), saleId: r.saleId || null, billNo: String(r.billNo || fallbackBillNo(r.date, r.saleId || r.id)), date: r.date, customer: String(r.customer).trim(), dueDate: validDate(r.dueDate) ? r.dueDate : "", total: Math.max(0, numberValue(r.total)), note: String(r.note || ""), createdAt: r.createdAt || null }; });
 db.receivablePayments = db.receivablePayments.filter(function(p) { return p && p.id && p.receivableId && validDate(p.date); }).map(function(p) { return { id: String(p.id), receivableId: String(p.receivableId), date: p.date, amount: Math.max(0, numberValue(p.amount)), method: String(p.method || "cash"), note: String(p.note || ""), createdAt: p.createdAt || null }; });
+db.changeReturns = db.changeReturns.filter(function(r) { return r && r.id && r.saleId && validDate(r.date); }).map(function(r) { return { id: String(r.id), saleId: String(r.saleId), billNo: String(r.billNo || fallbackBillNo(r.date, r.saleId || r.id)), date: r.date, recipient: String(r.recipient || ""), amount: Math.max(0, numberValue(r.amount)), note: String(r.note || ""), createdAt: r.createdAt || null }; });
 
 function prepareUserData(userId) {
   var previous = null;
   try { previous = JSON.parse(sessionStorage.getItem("supabaseUser") || "null"); } catch (error) { previous = null; }
   if (previous && previous.id && previous.id !== userId) {
-    db = { pin: "1234", products: [], sales: [], cashEntries: [], receivables: [], receivablePayments: [] };
+    db = { pin: "1234", products: [], sales: [], cashEntries: [], receivables: [], receivablePayments: [], changeReturns: [] };
     saveLocal();
   }
 }
@@ -443,8 +446,8 @@ async function syncToSupabase() {
 
   try {
     var userId = currentUser.id;
-    var tables = ["products", "sales", "cashEntries", "receivables", "receivablePayments"];
-    var remoteTables = { cashEntries: "cash_entries", receivables: "receivables", receivablePayments: "receivable_payments" };
+    var tables = ["products", "sales", "cashEntries", "receivables", "receivablePayments", "changeReturns"];
+    var remoteTables = { cashEntries: "cash_entries", receivables: "receivables", receivablePayments: "receivable_payments", changeReturns: "change_returns" };
     var deletedIds = {};
     for (var di = 0; di < tables.length; di++) {
       var localTable = tables[di];
@@ -460,6 +463,7 @@ async function syncToSupabase() {
     var activeCashEntries = db.cashEntries.filter(function(e) { return deletedIds.cashEntries.indexOf(e.id) === -1; });
     var activeReceivables = db.receivables.filter(function(r) { return deletedIds.receivables.indexOf(r.id) === -1; });
     var activeReceivablePayments = db.receivablePayments.filter(function(p) { return deletedIds.receivablePayments.indexOf(p.id) === -1; });
+    var activeChangeReturns = db.changeReturns.filter(function(r) { return deletedIds.changeReturns.indexOf(r.id) === -1; });
     if (activeProducts.length > 0) {
       await supabaseUpsert('products', activeProducts.map(function(p) {
         return { id: p.id, name: p.name, category: p.category || "Umum", unit: p.unit || "pcs", cost: p.cost, price: p.price, stock: p.stock, min_stock: p.minStock || 0, active: p.active !== false, note: p.note || "", user_id: userId };
@@ -471,13 +475,14 @@ async function syncToSupabase() {
           id: s.id, date: s.date, bill_no: s.billNo || fallbackBillNo(s.date, s.id), product_id: s.productId || ("legacy-" + s.id), product: s.product,
           price: s.price, qty: s.qty, cost: s.cost, total: s.total, profit: s.profit, discount: s.discount || 0,
           payment_method: s.paymentMethod || "cash", paid_amount: s.paidAmount || 0, tendered_amount: s.tenderedAmount == null ? (s.paidAmount || 0) : s.tenderedAmount, change_amount: s.changeAmount || 0,
-          customer: s.customer || "", due_date: s.dueDate || null, note: s.note || "", receivable_id: s.receivableId || null, user_id: userId
+          customer: s.customer || "", change_recipient: s.changeRecipient || s.customer || "", due_date: s.dueDate || null, note: s.note || "", receivable_id: s.receivableId || null, user_id: userId
         };
       }), accessToken);
     }
     if (activeCashEntries.length > 0) await supabaseUpsert('cash_entries', activeCashEntries.map(function(e) { return { id: e.id, date: e.date, type: e.type, category: e.category, amount: e.amount, party: e.party, reference: e.reference, note: e.note, source: e.source, source_id: e.sourceId, user_id: userId }; }), accessToken);
     if (activeReceivables.length > 0) await supabaseUpsert('receivables', activeReceivables.map(function(r) { return { id: r.id, sale_id: r.saleId, bill_no: r.billNo || fallbackBillNo(r.date, r.saleId || r.id), date: r.date, customer: r.customer, due_date: r.dueDate || null, total: r.total, note: r.note, user_id: userId }; }), accessToken);
     if (activeReceivablePayments.length > 0) await supabaseUpsert('receivable_payments', activeReceivablePayments.map(function(p) { return { id: p.id, receivable_id: p.receivableId, date: p.date, amount: p.amount, method: p.method, note: p.note, user_id: userId }; }), accessToken);
+    if (activeChangeReturns.length > 0) await supabaseUpsert('change_returns', activeChangeReturns.map(function(r) { return { id: r.id, sale_id: r.saleId, bill_no: r.billNo, date: r.date, recipient: r.recipient, amount: r.amount, note: r.note, user_id: userId }; }), accessToken);
   } catch (error) {
     console.error('Sync error:', error);
   }
@@ -497,17 +502,20 @@ async function syncFromSupabase() {
     var cashEntries = await supabaseSelect('cash_entries', accessToken, userFilter);
     var receivables = await supabaseSelect('receivables', accessToken, userFilter);
     var receivablePayments = await supabaseSelect('receivable_payments', accessToken, userFilter);
+    var changeReturns = await supabaseSelect('change_returns', accessToken, userFilter);
 
     var userDeletedProducts = pendingDeletes.products.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
     var userDeletedSales = pendingDeletes.sales.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
     var userDeletedCash = pendingDeletes.cashEntries.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
     var userDeletedReceivables = pendingDeletes.receivables.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
     var userDeletedPayments = pendingDeletes.receivablePayments.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
+    var userDeletedChangeReturns = pendingDeletes.changeReturns.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
     if (Array.isArray(products)) db.products = products.filter(function(p) { return userDeletedProducts.indexOf(p.id) === -1; }).map(function(p) { return { id: p.id, name: String(p.name || ""), category: String(p.category || "Umum"), unit: String(p.unit || "pcs"), cost: numberValue(p.cost), price: numberValue(p.price), stock: integerValue(p.stock), minStock: integerValue(p.min_stock), active: p.active !== false, note: String(p.note || "") }; });
-    if (Array.isArray(sales)) db.sales = sales.filter(function(s) { return userDeletedSales.indexOf(s.id) === -1; }).map(function(s) { var price = numberValue(s.price), qty = integerValue(s.qty), cost = numberValue(s.cost), discount = Math.min(price * qty, numberValue(s.discount)), netTotal = price * qty - discount; return { id: s.id, date: validDate(s.date) ? s.date : today(), billNo: String(s.bill_no || fallbackBillNo(s.date, s.id)), productId: s.product_id, product: String(s.product || ""), price: price, qty: qty, cost: cost, total: netTotal, discount: discount, profit: (price - cost) * qty - discount, paymentMethod: String(s.payment_method || "cash"), paidAmount: Math.max(0, Math.min(netTotal, numberValue(s.paid_amount, s.payment_method === "credit" ? 0 : netTotal))), tenderedAmount: Math.max(0, numberValue(s.tendered_amount, s.paid_amount)), changeAmount: Math.max(0, numberValue(s.change_amount)), customer: String(s.customer || ""), dueDate: validDate(s.due_date) ? s.due_date : "", note: String(s.note || ""), receivableId: s.receivable_id || null, createdAt: s.created_at || null }; });
+    if (Array.isArray(sales)) db.sales = sales.filter(function(s) { return userDeletedSales.indexOf(s.id) === -1; }).map(function(s) { var price = numberValue(s.price), qty = integerValue(s.qty), cost = numberValue(s.cost), discount = Math.min(price * qty, numberValue(s.discount)), netTotal = price * qty - discount; return { id: s.id, date: validDate(s.date) ? s.date : today(), billNo: String(s.bill_no || fallbackBillNo(s.date, s.id)), productId: s.product_id, product: String(s.product || ""), price: price, qty: qty, cost: cost, total: netTotal, discount: discount, profit: (price - cost) * qty - discount, paymentMethod: String(s.payment_method || "cash"), paidAmount: Math.max(0, Math.min(netTotal, numberValue(s.paid_amount, s.payment_method === "credit" ? 0 : netTotal))), tenderedAmount: Math.max(0, numberValue(s.tendered_amount, s.paid_amount)), changeAmount: Math.max(0, numberValue(s.change_amount)), customer: String(s.customer || ""), changeRecipient: String(s.change_recipient || s.customer || ""), dueDate: validDate(s.due_date) ? s.due_date : "", note: String(s.note || ""), receivableId: s.receivable_id || null, createdAt: s.created_at || null }; });
     if (Array.isArray(cashEntries)) db.cashEntries = cashEntries.filter(function(e) { return userDeletedCash.indexOf(e.id) === -1; }).map(function(e) { return { id: e.id, date: validDate(e.date) ? e.date : today(), type: e.type === "out" ? "out" : "in", category: String(e.category || "Lainnya"), amount: Math.max(0, numberValue(e.amount)), party: String(e.party || ""), reference: String(e.reference || ""), note: String(e.note || ""), source: String(e.source || "manual"), sourceId: e.source_id || null, createdAt: e.created_at || null }; });
     if (Array.isArray(receivables)) db.receivables = receivables.filter(function(r) { return userDeletedReceivables.indexOf(r.id) === -1; }).map(function(r) { return { id: r.id, saleId: r.sale_id || null, billNo: String(r.bill_no || fallbackBillNo(r.date, r.sale_id || r.id)), date: validDate(r.date) ? r.date : today(), customer: String(r.customer || ""), dueDate: validDate(r.due_date) ? r.due_date : "", total: Math.max(0, numberValue(r.total)), note: String(r.note || ""), createdAt: r.created_at || null }; });
     if (Array.isArray(receivablePayments)) db.receivablePayments = receivablePayments.filter(function(p) { return userDeletedPayments.indexOf(p.id) === -1; }).map(function(p) { return { id: p.id, receivableId: p.receivable_id, date: validDate(p.date) ? p.date : today(), amount: Math.max(0, numberValue(p.amount)), method: String(p.method || "cash"), note: String(p.note || ""), createdAt: p.created_at || null }; });
+    if (Array.isArray(changeReturns)) db.changeReturns = changeReturns.filter(function(r) { return userDeletedChangeReturns.indexOf(r.id) === -1; }).map(function(r) { return { id: r.id, saleId: r.sale_id, billNo: String(r.bill_no || fallbackBillNo(r.date, r.sale_id || r.id)), date: validDate(r.date) ? r.date : today(), recipient: String(r.recipient || ""), amount: Math.max(0, numberValue(r.amount)), note: String(r.note || ""), createdAt: r.created_at || null }; });
     saveLocal();
     console.log('Data synced from Supabase');
     return true;
@@ -727,6 +735,7 @@ function boot() {
   if ($("salePaymentMethod")) $("salePaymentMethod").onchange = calcSaleTotal;
   if ($("addSaleBtn")) $("addSaleBtn").onclick = addSale;
   if ($("saleSearch")) $("saleSearch").oninput = renderSales;
+  if ($("changeSearch")) $("changeSearch").oninput = renderPendingChanges;
 
   // Product handlers
   if ($("addProductBtn")) $("addProductBtn").onclick = addProduct;
@@ -1049,6 +1058,24 @@ function getReceivablePayments(receivableId) { return db.receivablePayments.filt
 function getReceivablePaid(receivableId) { return getReceivablePayments(receivableId).reduce(function(total, p) { return total + p.amount; }, 0); }
 function getReceivableBalance(r) { return Math.max(0, r.total - getReceivablePaid(r.id)); }
 function getReceivableStatus(r) { var balance = getReceivableBalance(r); if (balance <= 0) return "Lunas"; if (r.dueDate && r.dueDate < today()) return "Jatuh tempo"; return "Belum jatuh tempo"; }
+function getChangeReturns(saleId) { return db.changeReturns.filter(function(item) { return item.saleId === saleId; }); }
+function getChangeReturned(saleId) { return getChangeReturns(saleId).reduce(function(total, item) { return total + item.amount; }, 0); }
+function getChangeBalance(sale) { return Math.max(0, numberValue(sale && sale.changeAmount) - getChangeReturned(sale && sale.id)); }
+function pendingChangeSales() { return db.sales.filter(function(s) { return numberValue(s.changeAmount) > 0 && getChangeBalance(s) > 0; }); }
+function changeStatus(sale) { var balance = getChangeBalance(sale), returned = getChangeReturned(sale && sale.id); return balance <= 0 ? "Sudah dikembalikan" : returned > 0 ? "Sebagian dikembalikan" : "Belum dikembalikan"; }
+function addChangeReturn(saleId) {
+  var sale = db.sales.find(function(item) { return item.id === saleId; });
+  if (!sale) return;
+  var balance = getChangeBalance(sale), billNo = sale.billNo || fallbackBillNo(sale.date, sale.id);
+  if (balance <= 0) return toast("Kembalian untuk " + billNo + " sudah lengkap.");
+  var amount = numberValue(prompt("Nominal kembalian untuk " + billNo + " (sisa " + rupiah(balance) + "):", balance));
+  if (!Number.isFinite(amount) || amount <= 0 || amount > balance) return toast("Nominal kembalian harus lebih dari nol dan tidak melebihi sisa.");
+  var recipient = prompt("Nama penerima kembalian:", sale.changeRecipient || sale.customer || "") || sale.changeRecipient || sale.customer || "Pelanggan";
+  var note = prompt("Catatan pengembalian (opsional):", "") || "", date = today(), returnId = uniqueId(), createdAt = new Date().toISOString();
+  db.changeReturns.push({ id: returnId, saleId: sale.id, billNo: billNo, date: date, recipient: recipient, amount: amount, note: note, createdAt: createdAt });
+  db.cashEntries.push({ id: uniqueId(), date: date, type: "out", category: "Kembalian pelanggan", amount: amount, party: recipient, reference: billNo, note: note || "Pengembalian kembalian", source: "changeReturn", sourceId: returnId, createdAt: createdAt });
+  save(); renderAll(); toast(amount === balance ? "Kembalian " + billNo + " sudah dikembalikan." : "Pengembalian sebagian berhasil dicatat.");
+}
 function allCashEntries() {
   var entries = db.cashEntries.slice();
   db.sales.forEach(function(s) {
@@ -1069,7 +1096,7 @@ function cashSummary(from, to) {
   return { entries: entries, cashIn: cashIn, cashOut: cashOut, net: cashIn - cashOut };
 }
 function outstandingReceivables(asOf) { return db.receivables.filter(function(r) { return (!asOf || r.date <= asOf) && getReceivableBalance(r) > 0; }); }
-function renderAll() { renderProducts(); fillProductSelect(); renderSales(); renderCash(); renderReceivables(); renderDashboard(); renderReport(); }
+function renderAll() { renderProducts(); fillProductSelect(); renderSales(); renderPendingChanges(); renderCash(); renderReceivables(); renderDashboard(); renderReport(); }
 
 function addProduct() {
   if (!$('pName') || !$('pCost') || !$('pPrice') || !$('pStock')) return;
@@ -1164,7 +1191,7 @@ function addSale() {
   var price = numberValue($('salePrice').value), qty = integerValue($('saleQty').value), date = $('saleDate').value || today();
   var selectedMethod = $('salePaymentMethod') ? $('salePaymentMethod').value : "cash";
   var rawPaid = $('salePaid') ? $('salePaid').value.trim() : "";
-  var total = price * qty, customer = $('saleCustomer') ? $('saleCustomer').value.trim() : "", dueDate = $('saleDueDate') ? $('saleDueDate').value : "", note = $('saleNote') ? $('saleNote').value.trim() : "";
+  var total = price * qty, customer = $('saleCustomer') ? $('saleCustomer').value.trim() : "", changeRecipient = $('changeRecipient') ? $('changeRecipient').value.trim() : "", dueDate = $('saleDueDate') ? $('saleDueDate').value : "", note = $('saleNote') ? $('saleNote').value.trim() : "";
   var payment = calculateSalePayment(total, selectedMethod, rawPaid), paidInput = payment.tendered;
   if (!p) return toast("Pilih menu.");
   if (!validDate(date)) return toast("Tanggal transaksi tidak valid.");
@@ -1177,7 +1204,7 @@ function addSale() {
   if (needsReceivable && !customer) return toast("Uang kurang. Nama debitur wajib diisi agar piutang tersimpan.");
   if (needsReceivable && dueDate && !validDate(dueDate)) return toast("Jatuh tempo tidak valid.");
   var change = (method === "cash" || method === "credit") ? Math.max(0, paidInput - total) : 0, newId = uniqueId(), billNo = createBillNo(date), receivableId = null, createdAt = new Date().toISOString();
-  var sale = { id: newId, date: date, billNo: billNo, createdAt: createdAt, productId: p.id, product: p.name, price: price, qty: qty, cost: p.cost, total: total, discount: 0, profit: (price - p.cost) * qty, paymentMethod: method, paidAmount: paid, tenderedAmount: paidInput, changeAmount: change, customer: customer, dueDate: dueDate, note: note, receivableId: null };
+  var sale = { id: newId, date: date, billNo: billNo, createdAt: createdAt, productId: p.id, product: p.name, price: price, qty: qty, cost: p.cost, total: total, discount: 0, profit: (price - p.cost) * qty, paymentMethod: method, paidAmount: paid, tenderedAmount: paidInput, changeAmount: change, changeRecipient: changeRecipient || customer, customer: customer, dueDate: dueDate, note: note, receivableId: null };
   db.sales.push(sale);
   p.stock -= qty;
   if (paid > 0) db.cashEntries.push({ id: uniqueId(), date: date, type: "in", category: "Penjualan", amount: paid, party: customer || "Pelanggan", reference: billNo, note: note, source: "sale", sourceId: newId, createdAt: createdAt });
@@ -1188,8 +1215,19 @@ function addSale() {
     if (paid > 0) { var openingPaymentId = uniqueId(); db.receivablePayments.push({ id: openingPaymentId, receivableId: receivableId, date: date, amount: paid, method: method === "credit" ? "cash" : method, note: "Pembayaran awal saat penjualan", createdAt: createdAt }); }
   }
   save();
-  $('saleProduct').value = ""; $('salePrice').value = ""; $('saleQty').value = 1; if ($('salePaid')) $('salePaid').value = ""; if ($('saleCustomer')) $('saleCustomer').value = ""; if ($('saleDueDate')) { $('saleDueDate').value = ""; $('saleDueDate').disabled = true; } if ($('saleNote')) $('saleNote').value = ""; if ($('stockInfo')) $('stockInfo').textContent = "";
+  $('saleProduct').value = ""; $('salePrice').value = ""; $('saleQty').value = 1; if ($('salePaid')) $('salePaid').value = ""; if ($('saleCustomer')) $('saleCustomer').value = ""; if ($('changeRecipient')) $('changeRecipient').value = ""; if ($('saleDueDate')) { $('saleDueDate').value = ""; $('saleDueDate').disabled = true; } if ($('saleNote')) $('saleNote').value = ""; if ($('stockInfo')) $('stockInfo').textContent = "";
   calcSaleTotal(); renderAll(); toast(needsReceivable ? "Penjualan tersimpan. Kekurangan otomatis menjadi piutang " + billNo + "." : "Penjualan berhasil disimpan."); printReceipt(newId);
+}
+
+function renderPendingChanges() {
+  if (!$('pendingChangesTable')) return;
+  var q = ($('changeSearch') ? $('changeSearch').value : '').toLowerCase().trim();
+  var rows = db.sales.filter(function(s) { return numberValue(s.changeAmount) > 0 && (!q || [s.billNo, s.date, s.customer, s.changeRecipient, changeStatus(s)].join(' ').toLowerCase().indexOf(q) !== -1); }).sort(function(a, b) { return b.date.localeCompare(a.date); });
+  var total = rows.reduce(function(n, s) { return n + getChangeBalance(s); }, 0), partial = rows.filter(function(s) { return getChangeReturned(s.id) > 0; }).length;
+  if ($('pendingChangeTotal')) $('pendingChangeTotal').textContent = rupiah(total);
+  if ($('pendingChangeCount')) $('pendingChangeCount').textContent = rows.length;
+  if ($('partialChangeCount')) $('partialChangeCount').textContent = partial;
+  $('pendingChangesTable').innerHTML = rows.map(function(s) { var returned = getChangeReturned(s.id), balance = getChangeBalance(s), status = changeStatus(s); return '<tr><td><b>' + esc(s.billNo || fallbackBillNo(s.date, s.id)) + '</b><small>' + esc(s.date) + '</small></td><td><b>' + esc(s.changeRecipient || s.customer || 'Pelanggan') + '</b><small>' + esc(s.customer || '') + '</small></td><td>' + rupiah(s.changeAmount) + '</td><td>' + rupiah(returned) + '</td><td><b>' + rupiah(balance) + '</b></td><td class="' + (status === 'Sebagian dikembalikan' ? 'warning' : 'negative') + '">' + status + '</td><td><button class="mini" onclick="addChangeReturn(\'' + s.id + '\')">Kembalikan</button> <button class="mini" onclick="printReceipt(\'' + s.id + '\')">Struk</button></td></tr>'; }).join('') || '<tr><td colspan="7" class="empty-state">Tidak ada kembalian yang masih harus diberikan.</td></tr>';
 }
 
 function renderSales() {
@@ -1205,7 +1243,7 @@ function renderSales() {
     try { label = new Date(date + "T00:00:00").toLocaleDateString("id-ID", { weekday: "long", day: "2-digit", month: "long", year: "numeric" }); } catch (error) {}
     html += '<tr class="date-group-row"><td colspan="7"><div class="date-group-heading"><b>' + esc(label) + '</b><span>' + group.length + ' transaksi</span></div></td></tr>';
     html += group.map(function(s) {
-      var balance = saleBalance(s), paymentMeta = '<div class="payment-cell"><b>' + esc(salePaymentDisplay(s)) + '</b><small>Dibayar ' + rupiah(s.paidAmount || 0) + '</small>' + (s.changeAmount ? '<small>Kembalian ' + rupiah(s.changeAmount) + '</small>' : '') + (balance > 0 ? '<small class="warning">Sisa ' + rupiah(balance) + '</small>' : '') + '</div>';
+      var balance = saleBalance(s), paymentMeta = '<div class="payment-cell"><b>' + esc(salePaymentDisplay(s)) + '</b><small>Dibayar ' + rupiah(s.paidAmount || 0) + '</small>' + (s.changeAmount ? '<small>Kembalian ' + rupiah(s.changeAmount) + '</small><small class="' + (getChangeBalance(s) > 0 ? 'warning' : 'positive') + '">' + (getChangeBalance(s) > 0 ? 'Sisa kembalian ' + rupiah(getChangeBalance(s)) : 'Kembalian lengkap') + '</small>' : '') + (balance > 0 ? '<small class="warning">Sisa ' + rupiah(balance) + '</small>' : '') + '</div>';
       return '<tr><td><b>' + esc(s.billNo || fallbackBillNo(s.date, s.id)) + '</b></td><td><b>' + esc(s.product) + '</b><small>' + rupiah(s.price) + ' / item</small></td><td>' + s.qty + '</td><td><b>' + rupiah(s.total) + '</b></td><td>' + paymentMeta + '</td><td>' + esc(s.customer || '-') + '</td><td><div class="row-actions"><button class="mini" onclick="printReceipt(\'' + s.id + '\')">Struk</button><button class="mini del" onclick="deleteSale(\'' + s.id + '\')">Hapus</button></div></td></tr>';
     }).join("");
   });
@@ -1220,6 +1258,11 @@ function deleteSale(id) {
   queueRemoteDelete("sales", s.id);
   db.cashEntries.filter(function(e) { return e.source === "sale" && e.sourceId === s.id; }).forEach(function(e) { queueRemoteDelete("cashEntries", e.id); });
   db.cashEntries = db.cashEntries.filter(function(e) { return !(e.source === "sale" && e.sourceId === s.id); });
+  var relatedChangeReturns = db.changeReturns.filter(function(item) { return item.saleId === s.id; });
+  relatedChangeReturns.forEach(function(item) { queueRemoteDelete("changeReturns", item.id); });
+  db.cashEntries.filter(function(e) { return e.source === "changeReturn" && relatedChangeReturns.some(function(item) { return item.id === e.sourceId; }); }).forEach(function(e) { queueRemoteDelete("cashEntries", e.id); });
+  db.cashEntries = db.cashEntries.filter(function(e) { return !(e.source === "changeReturn" && relatedChangeReturns.some(function(item) { return item.id === e.sourceId; })); });
+  db.changeReturns = db.changeReturns.filter(function(item) { return item.saleId !== s.id; });
   if (s.receivableId) {
     var relatedPayments = db.receivablePayments.filter(function(payment) { return payment.receivableId === s.receivableId; });
     relatedPayments.forEach(function(payment) { queueRemoteDelete("receivablePayments", payment.id); });
@@ -1360,8 +1403,8 @@ function printReceipt(id) {
   var s = db.sales.find(function(x) { return x.id === id; });
   if (!s) return;
   var receiptNo = s.billNo || fallbackBillNo(s.date, s.id), balance = saleBalance(s), time = s.createdAt ? esc(new Date(s.createdAt).toLocaleString("id-ID")) : esc(s.date);
-  var tendered = Math.max(0, numberValue(s.tenderedAmount, s.paidAmount)), paid = Math.max(0, numberValue(s.paidAmount)), change = Math.max(0, numberValue(s.changeAmount));
-  $('printArea').innerHTML = '<article class="receipt"><header class="receipt-head"><div class="receipt-logo">✦</div><h1>' + esc(BRAND.name) + '</h1><p>' + esc(BRAND.tagline) + '</p></header><div class="receipt-meta"><span>No. Bill<br><b>' + esc(receiptNo) + '</b></span><span>Tanggal<br><b>' + esc(time) + '</b></span></div><table class="receipt-items"><thead><tr><th>Item</th><th>Qty</th><th>Harga</th><th>Subtotal</th></tr></thead><tbody><tr><td>' + esc(s.product) + '</td><td>' + integerValue(s.qty) + '</td><td>' + rupiah(s.price) + '</td><td>' + rupiah(s.total) + '</td></tr></tbody></table><div class="receipt-total"><span>Total transaksi</span><strong>' + rupiah(s.total) + '</strong></div><div class="receipt-payment"><p><span>Metode pembayaran</span><b>' + esc(salePaymentDisplay(s)) + '</b></p><p><span>Uang diterima</span><b>' + rupiah(tendered) + '</b></p><p><span>Jumlah dibayar</span><b>' + rupiah(paid) + '</b></p><p><span>Kembalian</span><b>' + rupiah(change) + '</b></p>' + (balance > 0 ? '<p class="receipt-debt"><span>Sisa piutang</span><b>' + rupiah(balance) + '</b></p><p><span>Jatuh tempo</span><b>' + esc(s.dueDate || '-') + '</b></p>' : '') + '</div>' + (s.customer ? '<p>Pelanggan/Debitur: <b>' + esc(s.customer) + '</b></p>' : '') + (s.note ? '<p>Catatan: ' + esc(s.note) + '</p>' : '') + '<footer>Terima kasih sudah berkunjung.<br>Semoga harimu selalu hangat.</footer></article>';
+  var tendered = Math.max(0, numberValue(s.tenderedAmount, s.paidAmount)), paid = Math.max(0, numberValue(s.paidAmount)), change = Math.max(0, numberValue(s.changeAmount)), returnedChange = getChangeReturned(s.id), remainingChange = getChangeBalance(s);
+  $('printArea').innerHTML = '<article class="receipt"><header class="receipt-head"><div class="receipt-logo">✦</div><h1>' + esc(BRAND.name) + '</h1><p>' + esc(BRAND.tagline) + '</p></header><div class="receipt-meta"><span>No. Bill<br><b>' + esc(receiptNo) + '</b></span><span>Tanggal<br><b>' + esc(time) + '</b></span></div><table class="receipt-items"><thead><tr><th>Item</th><th>Qty</th><th>Harga</th><th>Subtotal</th></tr></thead><tbody><tr><td>' + esc(s.product) + '</td><td>' + integerValue(s.qty) + '</td><td>' + rupiah(s.price) + '</td><td>' + rupiah(s.total) + '</td></tr></tbody></table><div class="receipt-total"><span>Total transaksi</span><strong>' + rupiah(s.total) + '</strong></div><div class="receipt-payment"><p><span>Metode pembayaran</span><b>' + esc(salePaymentDisplay(s)) + '</b></p><p><span>Uang diterima</span><b>' + rupiah(tendered) + '</b></p><p><span>Jumlah dibayar</span><b>' + rupiah(paid) + '</b></p><p><span>Total kembalian</span><b>' + rupiah(change) + '</b></p><p><span>Sudah diberikan</span><b>' + rupiah(returnedChange) + '</b></p><p><span>Sisa kembalian</span><b>' + rupiah(remainingChange) + '</b></p>' + (balance > 0 ? '<p class="receipt-debt"><span>Sisa piutang</span><b>' + rupiah(balance) + '</b></p><p><span>Jatuh tempo</span><b>' + esc(s.dueDate || '-') + '</b></p>' : '') + '</div>' + (s.customer ? '<p>Pelanggan/Debitur: <b>' + esc(s.customer) + '</b></p>' : '') + (s.note ? '<p>Catatan: ' + esc(s.note) + '</p>' : '') + '<footer>Terima kasih sudah berkunjung.<br>Semoga harimu selalu hangat.</footer></article>';
   window.print();
 }
 
@@ -1385,11 +1428,12 @@ function restore() {
         if (!s || !s.id || !validDate(s.date) || !String(s.product || "").trim()) throw 0;
         var price = numberValue(s.price), qty = integerValue(s.qty), cost = numberValue(s.cost), total = price * qty, discount = Math.min(total, numberValue(s.discount)), netTotal = total - discount;
         if (price < 0 || qty < 1 || cost < 0) throw 0;
-        return { id: String(s.id), date: s.date, billNo: String(s.billNo || fallbackBillNo(s.date, s.id)), productId: s.productId || null, product: String(s.product), price: price, qty: qty, cost: cost, total: netTotal, discount: discount, profit: (price - cost) * qty - discount, paymentMethod: String(s.paymentMethod || "cash"), paidAmount: Math.max(0, Math.min(netTotal, numberValue(s.paidAmount, s.paymentMethod === "credit" ? 0 : netTotal))), tenderedAmount: Math.max(0, numberValue(s.tenderedAmount, s.paidAmount)), changeAmount: Math.max(0, numberValue(s.changeAmount)), customer: String(s.customer || ""), dueDate: validDate(s.dueDate) ? s.dueDate : "", note: String(s.note || ""), receivableId: s.receivableId || null, createdAt: s.createdAt || null };
+        return { id: String(s.id), date: s.date, billNo: String(s.billNo || fallbackBillNo(s.date, s.id)), productId: s.productId || null, product: String(s.product), price: price, qty: qty, cost: cost, total: netTotal, discount: discount, profit: (price - cost) * qty - discount, paymentMethod: String(s.paymentMethod || "cash"), paidAmount: Math.max(0, Math.min(netTotal, numberValue(s.paidAmount, s.paymentMethod === "credit" ? 0 : netTotal))), tenderedAmount: Math.max(0, numberValue(s.tenderedAmount, s.paidAmount)), changeAmount: Math.max(0, numberValue(s.changeAmount)), changeRecipient: String(s.changeRecipient || s.customer || ""), customer: String(s.customer || ""), dueDate: validDate(s.dueDate) ? s.dueDate : "", note: String(s.note || ""), receivableId: s.receivableId || null, createdAt: s.createdAt || null };
       });
       var restoredCash = (Array.isArray(x.cashEntries) ? x.cashEntries : []).filter(function(e) { return e && e.id && validDate(e.date) && numberValue(e.amount) > 0; }).map(function(e) { return { id: String(e.id), date: e.date, type: e.type === "out" ? "out" : "in", category: String(e.category || "Lainnya"), amount: numberValue(e.amount), party: String(e.party || ""), reference: String(e.reference || ""), note: String(e.note || ""), source: String(e.source || "manual"), sourceId: e.sourceId || null, createdAt: e.createdAt || null }; });
       var restoredReceivables = (Array.isArray(x.receivables) ? x.receivables : []).filter(function(r) { return r && r.id && validDate(r.date) && String(r.customer || "").trim() && numberValue(r.total) >= 0; }).map(function(r) { return { id: String(r.id), saleId: r.saleId || null, billNo: String(r.billNo || fallbackBillNo(r.date, r.saleId || r.id)), date: r.date, customer: String(r.customer).trim(), dueDate: validDate(r.dueDate) ? r.dueDate : "", total: numberValue(r.total), note: String(r.note || ""), createdAt: r.createdAt || null }; });
       var restoredPayments = (Array.isArray(x.receivablePayments) ? x.receivablePayments : []).filter(function(p) { return p && p.id && p.receivableId && validDate(p.date) && numberValue(p.amount) > 0; }).map(function(p) { return { id: String(p.id), receivableId: String(p.receivableId), date: p.date, amount: numberValue(p.amount), method: String(p.method || "cash"), note: String(p.note || ""), createdAt: p.createdAt || null }; });
+      var restoredChangeReturns = (Array.isArray(x.changeReturns) ? x.changeReturns : []).filter(function(item) { return item && item.id && item.saleId && validDate(item.date) && numberValue(item.amount) > 0; }).map(function(item) { return { id: String(item.id), saleId: String(item.saleId), billNo: String(item.billNo || fallbackBillNo(item.date, item.saleId || item.id)), date: item.date, recipient: String(item.recipient || ""), amount: numberValue(item.amount), note: String(item.note || ""), createdAt: item.createdAt || null }; });
       if (!confirm("Restore akan mengganti data saat ini. Lanjut?")) return;
       db.products.forEach(function(product) {
         if (!x.products.some(function(restoredProduct) { return restoredProduct.id === product.id; })) queueRemoteDelete("products", product.id);
@@ -1400,7 +1444,8 @@ function restore() {
       db.cashEntries.forEach(function(entry) { if (!restoredCash.some(function(item) { return item.id === entry.id; })) queueRemoteDelete("cashEntries", entry.id); });
       db.receivables.forEach(function(item) { if (!restoredReceivables.some(function(restored) { return restored.id === item.id; })) queueRemoteDelete("receivables", item.id); });
       db.receivablePayments.forEach(function(item) { if (!restoredPayments.some(function(restored) { return restored.id === item.id; })) queueRemoteDelete("receivablePayments", item.id); });
-      db = { pin: String(x.pin || db.pin || "1234"), products: restoredProducts, sales: restoredSales, cashEntries: restoredCash, receivables: restoredReceivables, receivablePayments: restoredPayments };
+      db.changeReturns.forEach(function(item) { if (!restoredChangeReturns.some(function(restored) { return restored.id === item.id; })) queueRemoteDelete("changeReturns", item.id); });
+      db = { pin: String(x.pin || db.pin || "1234"), products: restoredProducts, sales: restoredSales, cashEntries: restoredCash, receivables: restoredReceivables, receivablePayments: restoredPayments, changeReturns: restoredChangeReturns };
       save();
       renderAll();
       toast("Restore berhasil.");
@@ -1427,11 +1472,13 @@ function clearData() {
     db.cashEntries.forEach(function(entry) { queueRemoteDelete("cashEntries", entry.id); });
     db.receivables.forEach(function(item) { queueRemoteDelete("receivables", item.id); });
     db.receivablePayments.forEach(function(item) { queueRemoteDelete("receivablePayments", item.id); });
+    db.changeReturns.forEach(function(item) { queueRemoteDelete("changeReturns", item.id); });
     db.products = [];
     db.sales = [];
     db.cashEntries = [];
     db.receivables = [];
     db.receivablePayments = [];
+    db.changeReturns = [];
     save();
     renderAll();
     toast("Semua data dihapus.");
