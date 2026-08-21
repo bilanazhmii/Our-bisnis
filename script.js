@@ -29,7 +29,7 @@ const uniqueId = function() {
 var MSG = {
   errorGeneric: "Terjadi kesalahan. Coba lagi.",
   errorNetwork: "Gagal menghubungi server. Periksa koneksi internet.",
-  errorAuthServer: "Pendaftaran gagal di server Supabase. Periksa trigger database dan Auth Logs Supabase.",
+  errorAuthServer: "Pendaftaran ditolak oleh database Supabase. Jalankan SUPABASE_AUTH_REPAIR.sql, lalu cek Auth Logs dan Postgres Logs.",
   errorInvalidLogin: "Email atau password salah.",
   errorEmailNotConfirmed: "Email belum diverifikasi. Cek email Anda untuk tautan verifikasi.",
   errorAlreadyRegistered: "Email sudah terdaftar. Silakan login.",
@@ -182,7 +182,10 @@ function extractErrorPayload(source) {
 
 function parseSupabaseError(source) {
   if (source && source.status === 429) return MSG.errorRateLimit;
-  if (source && source.status >= 500) return MSG.errorAuthServer;
+  if (source && source.status >= 500) {
+    console.error("Supabase Auth/database error:", source.details || source);
+    return MSG.errorAuthServer;
+  }
   var payload = extractErrorPayload(source);
   if (!payload) return MSG.errorGeneric;
 

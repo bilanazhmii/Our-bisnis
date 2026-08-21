@@ -404,3 +404,53 @@ ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS tendered_amount NUMERIC DEFAUL
 ALTER TABLE public.receivables ADD COLUMN IF NOT EXISTS bill_no TEXT;
 CREATE INDEX IF NOT EXISTS sales_user_id_bill_no_idx ON public.sales (user_id, bill_no);
 CREATE INDEX IF NOT EXISTS receivables_user_id_bill_no_idx ON public.receivables (user_id, bill_no);
+
+
+-- ============================================
+-- AUTH SIGNUP REPAIR (IDEMPOTENT)
+-- Prevent optional role-sync failures from aborting Auth signup.
+-- ============================================
+
+ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS email TEXT DEFAULT '';
+ALTER TABLE public.user_roles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+UPDATE public.user_roles SET email = '' WHERE email IS NULL;
+ALTER TABLE public.user_roles ALTER COLUMN email SET DEFAULT '';
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF to_regclass('public.user_roles') IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.user_roles WHERE user_id = NEW.id::text
+  ) THEN
+    INSERT INTO public.user_roles (id, user_id, role, email)
+    VALUES (NEW.id::text, NEW.id::text, 'user', COALESCE(NEW.email, ''));
+  END IF;
+
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'handle_new_user role sync failed for %: % (%)', NEW.id, SQLERRM, SQLSTATE;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+INSERT INTO public.user_roles (id, user_id, role, email)
+SELECT u.id::text, u.id::text, 'user', COALESCE(u.email, '')
+FROM auth.users AS u
+WHERE NOT EXISTS (
+  SELECT 1 FROM public.user_roles AS r WHERE r.user_id = u.id::text
+);
+
+NOTIFY pgrst, 'reload schema';

@@ -22,25 +22,25 @@
       <button id="registerTab" class="tab-btn">Daftar</button>
     </div>
 
-    <div id="loginForm">
-      <input id="emailInput" type="email" placeholder="Email">
-      <input id="passwordInput" type="password" placeholder="Password">
-      <button id="emailLoginBtn" class="primary">Masuk</button>
-    </div>
+    <form id="loginForm" class="login-form" onsubmit="return false;">
+      <input id="emailInput" type="email" placeholder="Email" autocomplete="email">
+      <input id="passwordInput" type="password" placeholder="Password" autocomplete="current-password">
+      <button id="emailLoginBtn" type="button" class="primary">Masuk</button>
+    </form>
 
-    <div id="localLoginForm" class="hidden">
-      <input id="pinInput" type="password" placeholder="PIN Admin" inputmode="numeric" maxlength="8">
-      <button id="pinLoginBtn" class="primary">Masuk</button>
+    <form id="localLoginForm" class="login-form hidden" onsubmit="return false;">
+      <input id="pinInput" type="password" placeholder="PIN Admin" inputmode="numeric" maxlength="8" autocomplete="current-password">
+      <button id="pinLoginBtn" type="button" class="primary">Masuk</button>
       <small>Mode lokal tanpa cloud. PIN awal: 1234</small>
-    </div>
+    </form>
 
-    <div id="registerForm" class="hidden">
-      <input id="registerEmailInput" type="email" placeholder="Email">
-      <input id="registerPasswordInput" type="password" placeholder="Password (minimal 6 karakter)">
-      <input id="registerConfirmPasswordInput" type="password" placeholder="Konfirmasi Password">
-      <button id="registerBtn" class="primary">Daftar</button>
+    <form id="registerForm" class="login-form hidden" onsubmit="return false;">
+      <input id="registerEmailInput" type="email" placeholder="Email" autocomplete="email">
+      <input id="registerPasswordInput" type="password" placeholder="Password (minimal 6 karakter)" autocomplete="new-password">
+      <input id="registerConfirmPasswordInput" type="password" placeholder="Konfirmasi Password" autocomplete="new-password">
+      <button id="registerBtn" type="button" class="primary">Daftar</button>
       <small>Setelah daftar, cek email Anda untuk verifikasi sebelum login.</small>
-    </div>
+    </form>
 
     <button id="resendVerificationBtn" class="secondary hidden">Kirim Ulang Verifikasi Email</button>
 
