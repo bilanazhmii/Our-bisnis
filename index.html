@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.png" type="image/png">
 <title>El Matcha × el kopi</title>
-<link rel="stylesheet" href="style.css?v=layout3">
+<link rel="stylesheet" href="style.css?v=authfix1">
 </head>
 <body>
 <div id="loginScreen" class="login-screen">
@@ -29,6 +29,7 @@
     </form>
 
     <form id="localLoginForm" class="login-form hidden" onsubmit="return false;">
+      <input type="text" name="username" autocomplete="username" value="admin" class="visually-hidden" tabindex="-1" aria-hidden="true">
       <input id="pinInput" type="password" placeholder="PIN Admin" inputmode="numeric" maxlength="8" autocomplete="current-password">
       <button id="pinLoginBtn" type="button" class="primary">Masuk</button>
       <small>Mode lokal tanpa cloud. PIN awal: 1234</small>
@@ -214,11 +215,14 @@
   <div class="page-head"><div><h1>Pengaturan</h1><p>Pengaturan aplikasi dan keamanan.</p></div></div>
   <div class="card">
     <h2>Ganti PIN Admin</h2>
-    <div class="form-grid">
-      <label>PIN lama<input id="oldPin" type="password" inputmode="numeric"></label>
-      <label>PIN baru<input id="newPin" type="password" inputmode="numeric" maxlength="8"></label>
-    </div>
-    <button id="changePinBtn" class="primary">Simpan PIN</button><div id="pinMsg" class="msg"></div>
+    <form id="changePinForm" class="settings-form" onsubmit="return false;">
+      <input type="text" name="username" autocomplete="username" value="admin" class="visually-hidden" tabindex="-1" aria-hidden="true">
+      <div class="form-grid">
+        <label>PIN lama<input id="oldPin" type="password" inputmode="numeric" autocomplete="current-password"></label>
+        <label>PIN baru<input id="newPin" type="password" inputmode="numeric" maxlength="8" autocomplete="new-password"></label>
+      </div>
+      <button id="changePinBtn" type="button" class="primary">Simpan PIN</button><div id="pinMsg" class="msg"></div>
+    </form>
   </div>
   <div class="card"><h2>Data</h2><button id="clearBtn" class="danger-btn">Hapus Semua Data</button></div>
 </section>
@@ -244,6 +248,6 @@
 
 <div id="toast" class="toast"></div>
 <div id="printArea"></div>
-<script src="script.js?v=layout3"></script>
+<script src="script.js?v=authfix1"></script>
 </body>
 </html>

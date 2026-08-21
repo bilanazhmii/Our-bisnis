@@ -214,6 +214,8 @@ WHERE email = 'your-email@example.com';
 - Jika ingin menjalankan setup lengkap, jalankan ulang `setup_supabase.sql`; bagian `AUTH SIGNUP REPAIR` di bagian paling bawah akan menerapkan perbaikan yang sama.
 - Buka **Logs → Auth Logs** dan **Logs → Postgres Logs** di Supabase untuk melihat detail bila error masih ada. Error 500 pada signup biasanya berasal dari trigger atau database, bukan dari password pengguna.
 - File `.env` lokal hanya berlaku pada proses/deployment lokal. Untuk Vercel, masukkan `SUPABASE_URL` dan `SUPABASE_ANON_KEY` di **Project Settings → Environment Variables** untuk Production, Preview, dan Development, lalu lakukan redeploy.
+- Jika Auth Log berisi `unexpected_failure` dengan `Error sending confirmation email`, trigger database bukan penyebabnya. Periksa **Authentication → SMTP Settings** dan **Authentication → Email Templates**, lalu gunakan SMTP kustom untuk production. Supabase menyatakan SMTP bawaan memiliki batasan pengiriman dan dapat menolak alamat di luar organisasi/project.
+- Setelah memperbaiki SMTP, buka **Authentication → Users**. Jika email sudah ada, jangan daftar ulang. Buka tab **Login**, masukkan email dan password, lalu gunakan **Kirim Ulang Verifikasi Email** jika statusnya belum confirmed. Jika email sudah confirmed, langsung login.
 
 ### Email verifikasi tidak masuk atau tautannya tidak kembali ke aplikasi
 - Di **Authentication → Providers → Email**, aktifkan **Confirm email** dan **Allow new users to sign up**.

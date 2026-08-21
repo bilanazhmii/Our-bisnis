@@ -29,10 +29,11 @@ const uniqueId = function() {
 var MSG = {
   errorGeneric: "Terjadi kesalahan. Coba lagi.",
   errorNetwork: "Gagal menghubungi server. Periksa koneksi internet.",
-  errorAuthServer: "Pendaftaran ditolak oleh database Supabase. Jalankan SUPABASE_AUTH_REPAIR.sql, lalu cek Auth Logs dan Postgres Logs.",
+  errorAuthServer: "Server Supabase mengalami kesalahan. Periksa konfigurasi Auth, SMTP, dan Auth Logs.",
+  errorEmailDelivery: "Akun mungkin sudah dibuat, tetapi email verifikasi gagal dikirim. Periksa SMTP Supabase, lalu gunakan Kirim Ulang Verifikasi Email.",
   errorInvalidLogin: "Email atau password salah.",
-  errorEmailNotConfirmed: "Email belum diverifikasi. Cek email Anda untuk tautan verifikasi.",
-  errorAlreadyRegistered: "Email sudah terdaftar. Silakan login.",
+  errorEmailNotConfirmed: "Email belum diverifikasi. Cek email Anda, atau gunakan Kirim Ulang Verifikasi Email.",
+  errorAlreadyRegistered: "Email sudah terdaftar. Jika belum diverifikasi, klik Kirim Ulang Verifikasi Email. Jika sudah diverifikasi, isi email dan password di halaman Login.",
   errorRateLimit: "Terlalu banyak percobaan. Tunggu beberapa menit sebelum mencoba lagi.",
   errorWeakPassword: "Password terlalu lemah. Minimal 6 karakter.",
   errorSupabaseNotConfigured: "Supabase belum dikonfigurasi. Periksa environment variables di Vercel.",
@@ -181,13 +182,8 @@ function extractErrorPayload(source) {
 }
 
 function parseSupabaseError(source) {
-  if (source && source.status === 429) return MSG.errorRateLimit;
-  if (source && source.status >= 500) {
-    console.error("Supabase Auth/database error:", source.details || source);
-    return MSG.errorAuthServer;
-  }
   var payload = extractErrorPayload(source);
-  if (!payload) return MSG.errorGeneric;
+  if (!payload) return source && source.status >= 500 ? MSG.errorAuthServer : MSG.errorGeneric;
 
   var combined = [
     payload.msg,
@@ -195,53 +191,23 @@ function parseSupabaseError(source) {
     payload.error_description,
     payload.error,
     payload.hint,
-    payload.code
+    payload.code,
+    payload.error_code
   ].filter(Boolean).join(" ").toLowerCase();
 
-  if (
-    combined.indexOf("invalid login") !== -1 ||
-    combined.indexOf("invalid credentials") !== -1 ||
-    combined.indexOf("invalid_grant") !== -1 ||
-    payload.error_code === "invalid_credentials"
-  ) {
-    return MSG.errorInvalidLogin;
+  if (source && source.status === 429 || combined.indexOf("rate limit") !== -1 || payload.error_code === "over_request_rate_limit") return MSG.errorRateLimit;
+  if (combined.indexOf("email not confirmed") !== -1 || combined.indexOf("not confirmed") !== -1 || payload.error_code === "email_not_confirmed") return MSG.errorEmailNotConfirmed;
+  if (combined.indexOf("already registered") !== -1 || combined.indexOf("user already registered") !== -1 || combined.indexOf("email_exists") !== -1 || payload.error_code === "user_already_exists" || payload.error_code === "email_exists") return MSG.errorAlreadyRegistered;
+  if (combined.indexOf("error sending confirmation email") !== -1 || combined.indexOf("sending confirmation email") !== -1 || combined.indexOf("smtp") !== -1 || combined.indexOf("email delivery") !== -1) return MSG.errorEmailDelivery;
+  if (combined.indexOf("invalid login") !== -1 || combined.indexOf("invalid credentials") !== -1 || combined.indexOf("invalid_grant") !== -1 || payload.error_code === "invalid_credentials") return MSG.errorInvalidLogin;
+  if (combined.indexOf("weak password") !== -1 || combined.indexOf("password should") !== -1 || (combined.indexOf("password") !== -1 && (combined.indexOf("minimum") !== -1 || combined.indexOf("mínimo") !== -1 || combined.indexOf("character") !== -1 || combined.indexOf("caracter") !== -1)) || payload.error_code === "weak_password") return MSG.errorWeakPassword;
+  if (combined.indexOf("request failed") !== -1 || combined.indexOf("network") !== -1) return MSG.errorNetwork;
+
+  if (source && source.status >= 500) {
+    console.error("Supabase Auth/database error:", source.details || source);
+    return MSG.errorAuthServer;
   }
 
-  if (
-    combined.indexOf("email not confirmed") !== -1 ||
-    combined.indexOf("not confirmed") !== -1 ||
-    payload.error_code === "email_not_confirmed"
-  ) {
-    return MSG.errorEmailNotConfirmed;
-  }
-
-  if (
-    combined.indexOf("already registered") !== -1 ||
-    combined.indexOf("user already registered") !== -1 ||
-    payload.error_code === "user_already_exists"
-  ) {
-    return MSG.errorAlreadyRegistered;
-  }
-
-  if (combined.indexOf("rate limit") !== -1 || payload.error_code === "over_request_rate_limit") {
-    return MSG.errorRateLimit;
-  }
-
-  if (
-    combined.indexOf("weak password") !== -1 ||
-    combined.indexOf("password should") !== -1 ||
-    (combined.indexOf("password") !== -1 && (combined.indexOf("minimum") !== -1 || combined.indexOf("mínimo") !== -1 || combined.indexOf("character") !== -1 || combined.indexOf("caracter") !== -1)) ||
-    payload.error_code === "weak_password"
-  ) {
-    return MSG.errorWeakPassword;
-  }
-
-  if (combined.indexOf("request failed") !== -1 || combined.indexOf("network") !== -1) {
-    return MSG.errorNetwork;
-  }
-
-  // Do not display raw provider messages. Supabase may return them in a
-  // different language, while the application interface is Indonesian.
   return MSG.errorGeneric;
 }
 
@@ -892,6 +858,9 @@ async function handleEmailLogin() {
     }
   } catch (error) {
     var msg = parseSupabaseError(error);
+    if (msg === MSG.errorEmailNotConfirmed || msg === MSG.errorAlreadyRegistered) {
+      if ($("resendVerificationBtn")) $("resendVerificationBtn").classList.remove("hidden");
+    }
     $("loginMsg").textContent = msg;
     toast(msg);
   }
@@ -963,7 +932,14 @@ async function handleEmailRegister() {
   } catch (error) {
     if (error && error.status === 429) registerCooldownUntil = Date.now() + 60000;
     var msg = parseSupabaseError(error);
-    showLoginMessage(msg, false);
+    if (msg === MSG.errorAlreadyRegistered || msg === MSG.errorEmailDelivery || msg === MSG.errorEmailNotConfirmed) {
+      showLoginTab("login");
+      if ($("emailInput")) $("emailInput").value = email;
+      if ($("resendVerificationBtn")) $("resendVerificationBtn").classList.remove("hidden");
+      showLoginMessage(msg, false);
+    } else {
+      showLoginMessage(msg, false);
+    }
   } finally {
     registerInProgress = false;
     if (registerButton) {
