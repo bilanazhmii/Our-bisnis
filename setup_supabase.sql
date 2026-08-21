@@ -304,6 +304,7 @@ ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS discount NUMERIC DEFAULT 0;
 ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'cash';
 ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS paid_amount NUMERIC DEFAULT 0;
 ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS change_amount NUMERIC DEFAULT 0;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS change_recipient TEXT DEFAULT '';
 ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS customer TEXT DEFAULT '';
 ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS due_date TEXT;
 ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';
@@ -353,6 +354,58 @@ CREATE TABLE IF NOT EXISTS public.receivable_payments (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   CONSTRAINT receivable_payments_amount CHECK (amount > 0)
 );
+
+-- Complete older business tables without dropping existing rows.
+ALTER TABLE public.cash_entries ADD COLUMN IF NOT EXISTS date TEXT;
+ALTER TABLE public.cash_entries ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'in';
+ALTER TABLE public.cash_entries ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Lainnya';
+ALTER TABLE public.cash_entries ADD COLUMN IF NOT EXISTS amount NUMERIC DEFAULT 0;
+ALTER TABLE public.cash_entries ADD COLUMN IF NOT EXISTS party TEXT DEFAULT '';
+ALTER TABLE public.cash_entries ADD COLUMN IF NOT EXISTS reference TEXT DEFAULT '';
+ALTER TABLE public.cash_entries ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';
+ALTER TABLE public.cash_entries ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'manual';
+ALTER TABLE public.cash_entries ADD COLUMN IF NOT EXISTS source_id TEXT;
+ALTER TABLE public.cash_entries ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE public.cash_entries ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+ALTER TABLE public.cash_entries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+ALTER TABLE public.receivables ADD COLUMN IF NOT EXISTS sale_id TEXT;
+ALTER TABLE public.receivables ADD COLUMN IF NOT EXISTS bill_no TEXT;
+ALTER TABLE public.receivables ADD COLUMN IF NOT EXISTS date TEXT;
+ALTER TABLE public.receivables ADD COLUMN IF NOT EXISTS customer TEXT DEFAULT '';
+ALTER TABLE public.receivables ADD COLUMN IF NOT EXISTS due_date TEXT;
+ALTER TABLE public.receivables ADD COLUMN IF NOT EXISTS total NUMERIC DEFAULT 0;
+ALTER TABLE public.receivables ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';
+ALTER TABLE public.receivables ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE public.receivables ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+ALTER TABLE public.receivables ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+ALTER TABLE public.receivable_payments ADD COLUMN IF NOT EXISTS receivable_id TEXT;
+ALTER TABLE public.receivable_payments ADD COLUMN IF NOT EXISTS date TEXT;
+ALTER TABLE public.receivable_payments ADD COLUMN IF NOT EXISTS amount NUMERIC DEFAULT 0;
+ALTER TABLE public.receivable_payments ADD COLUMN IF NOT EXISTS method TEXT DEFAULT 'cash';
+ALTER TABLE public.receivable_payments ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';
+ALTER TABLE public.receivable_payments ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE public.receivable_payments ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+ALTER TABLE public.receivable_payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+-- Safe legacy ownership repair: if exactly one Auth user exists, assign orphaned
+-- business rows to that user. With multiple users, no unsafe guess is made.
+DO $$
+DECLARE
+  owner_id TEXT;
+  owner_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO owner_count FROM auth.users;
+  IF owner_count = 1 THEN
+    SELECT id::text INTO owner_id FROM auth.users LIMIT 1;
+    UPDATE public.products SET user_id = owner_id WHERE user_id IS NULL OR btrim(user_id) = '';
+    UPDATE public.sales SET user_id = owner_id WHERE user_id IS NULL OR btrim(user_id) = '';
+    UPDATE public.cash_entries SET user_id = owner_id WHERE user_id IS NULL OR btrim(user_id) = '';
+    UPDATE public.receivables SET user_id = owner_id WHERE user_id IS NULL OR btrim(user_id) = '';
+    UPDATE public.receivable_payments SET user_id = owner_id WHERE user_id IS NULL OR btrim(user_id) = '';
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS cash_entries_user_id_date_idx ON public.cash_entries (user_id, date);
 CREATE INDEX IF NOT EXISTS cash_entries_user_id_source_idx ON public.cash_entries (user_id, source, source_id);
@@ -476,6 +529,27 @@ CREATE TABLE IF NOT EXISTS public.change_returns (
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+ALTER TABLE public.change_returns ADD COLUMN IF NOT EXISTS sale_id TEXT;
+ALTER TABLE public.change_returns ADD COLUMN IF NOT EXISTS bill_no TEXT DEFAULT '';
+ALTER TABLE public.change_returns ADD COLUMN IF NOT EXISTS date DATE DEFAULT CURRENT_DATE;
+ALTER TABLE public.change_returns ADD COLUMN IF NOT EXISTS recipient TEXT DEFAULT '';
+ALTER TABLE public.change_returns ADD COLUMN IF NOT EXISTS amount NUMERIC DEFAULT 0;
+ALTER TABLE public.change_returns ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';
+ALTER TABLE public.change_returns ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE public.change_returns ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+DO $$
+DECLARE
+  owner_id UUID;
+  owner_count INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO owner_count FROM auth.users;
+  IF owner_count = 1 THEN
+    SELECT id INTO owner_id FROM auth.users LIMIT 1;
+    UPDATE public.change_returns SET user_id = owner_id WHERE user_id IS NULL;
+  END IF;
+END $$;
+
 ALTER TABLE public.change_returns ENABLE ROW LEVEL SECURITY;
 CREATE INDEX IF NOT EXISTS change_returns_user_sale_idx ON public.change_returns (user_id, sale_id);
 CREATE INDEX IF NOT EXISTS change_returns_user_date_idx ON public.change_returns (user_id, date DESC);

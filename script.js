@@ -440,10 +440,10 @@ function queueRemoteDelete(table, id) {
 }
 
 async function syncToSupabase() {
-  if (!useSupabase) return;
+  if (!useSupabase) return false;
   var accessToken = sessionStorage.getItem('supabaseAccessToken');
-  if (!accessToken) return;
-  if (!currentUser || !currentUser.id) return;
+  if (!accessToken) return false;
+  if (!currentUser || !currentUser.id) return false;
 
   try {
     var userId = currentUser.id;
@@ -484,12 +484,29 @@ async function syncToSupabase() {
     if (activeReceivables.length > 0) await supabaseUpsert('receivables', activeReceivables.map(function(r) { return { id: r.id, sale_id: r.saleId, bill_no: r.billNo || fallbackBillNo(r.date, r.saleId || r.id), date: r.date, customer: r.customer, due_date: r.dueDate || null, total: r.total, note: r.note, user_id: userId }; }), accessToken);
     if (activeReceivablePayments.length > 0) await supabaseUpsert('receivable_payments', activeReceivablePayments.map(function(p) { return { id: p.id, receivable_id: p.receivableId, date: p.date, amount: p.amount, method: p.method, note: p.note, user_id: userId }; }), accessToken);
     if (activeChangeReturns.length > 0) await supabaseUpsert('change_returns', activeChangeReturns.map(function(r) { return { id: r.id, sale_id: r.saleId, bill_no: r.billNo, date: r.date, recipient: r.recipient, amount: r.amount, note: r.note, user_id: userId }; }), accessToken);
+    return true;
   } catch (error) {
     console.error('Sync error:', error);
+    return false;
   }
 }
 
+function mergeRemoteRows(remoteRows, localRows, deletedIds) {
+  var remoteById = {}, merged = [];
+  (Array.isArray(remoteRows) ? remoteRows : []).forEach(function(row) {
+    if (!row || !row.id || deletedIds.indexOf(row.id) !== -1) return;
+    remoteById[row.id] = true;
+    merged.push(row);
+  });
+  (Array.isArray(localRows) ? localRows : []).forEach(function(row) {
+    if (!row || !row.id || deletedIds.indexOf(row.id) !== -1 || remoteById[row.id]) return;
+    merged.push(row);
+  });
+  return merged;
+}
+
 async function syncFromSupabase() {
+
   if (!useSupabase) return false;
   var accessToken = sessionStorage.getItem('supabaseAccessToken');
   if (!accessToken || !currentUser || !currentUser.id) return false;
@@ -497,13 +514,22 @@ async function syncFromSupabase() {
   try {
     await fetchUserRole(currentUser.id);
 
-    var userFilter = 'user_id=eq.' + encodeURIComponent(currentUser.id);
+    var userFilter = 'user_id=eq.' + encodeURIComponent(currentUser.id), syncWarnings = [];
     var products = await supabaseSelect('products', accessToken, userFilter);
     var sales = await supabaseSelect('sales', accessToken, userFilter);
-    var cashEntries = await supabaseSelect('cash_entries', accessToken, userFilter);
-    var receivables = await supabaseSelect('receivables', accessToken, userFilter);
-    var receivablePayments = await supabaseSelect('receivable_payments', accessToken, userFilter);
-    var changeReturns = await supabaseSelect('change_returns', accessToken, userFilter);
+    async function selectOptionalTable(table) {
+      try {
+        return await supabaseSelect(table, accessToken, userFilter);
+      } catch (error) {
+        syncWarnings.push(table);
+        console.warn('Optional Supabase table unavailable:', table, error);
+        return [];
+      }
+    }
+    var cashEntries = await selectOptionalTable('cash_entries');
+    var receivables = await selectOptionalTable('receivables');
+    var receivablePayments = await selectOptionalTable('receivable_payments');
+    var changeReturns = await selectOptionalTable('change_returns');
 
     var userDeletedProducts = pendingDeletes.products.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
     var userDeletedSales = pendingDeletes.sales.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
@@ -511,15 +537,22 @@ async function syncFromSupabase() {
     var userDeletedReceivables = pendingDeletes.receivables.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
     var userDeletedPayments = pendingDeletes.receivablePayments.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
     var userDeletedChangeReturns = pendingDeletes.changeReturns.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
-    if (Array.isArray(products)) db.products = products.filter(function(p) { return userDeletedProducts.indexOf(p.id) === -1; }).map(function(p) { return { id: p.id, name: String(p.name || ""), category: String(p.category || "Umum"), unit: String(p.unit || "pcs"), cost: numberValue(p.cost), price: numberValue(p.price), stock: integerValue(p.stock), minStock: integerValue(p.min_stock), active: p.active !== false, note: String(p.note || "") }; });
-    if (Array.isArray(sales)) db.sales = sales.filter(function(s) { return userDeletedSales.indexOf(s.id) === -1; }).map(function(s) { var price = numberValue(s.price), qty = integerValue(s.qty), cost = numberValue(s.cost), discount = Math.min(price * qty, numberValue(s.discount)), netTotal = price * qty - discount; return { id: s.id, date: validDate(s.date) ? s.date : today(), billNo: String(s.bill_no || fallbackBillNo(s.date, s.id)), productId: s.product_id, product: String(s.product || ""), price: price, qty: qty, cost: cost, total: netTotal, discount: discount, profit: (price - cost) * qty - discount, paymentMethod: String(s.payment_method || "cash"), paidAmount: Math.max(0, Math.min(netTotal, numberValue(s.paid_amount, s.payment_method === "credit" ? 0 : netTotal))), tenderedAmount: Math.max(0, numberValue(s.tendered_amount, s.paid_amount)), changeAmount: Math.max(0, numberValue(s.change_amount)), customer: String(s.customer || ""), changeRecipient: String(s.change_recipient || s.customer || ""), orderReceived: s.order_received === true, dueDate: validDate(s.due_date) ? s.due_date : "", note: String(s.note || ""), receivableId: s.receivable_id || null, createdAt: s.created_at || null }; });
-    if (Array.isArray(cashEntries)) db.cashEntries = cashEntries.filter(function(e) { return userDeletedCash.indexOf(e.id) === -1; }).map(function(e) { return { id: e.id, date: validDate(e.date) ? e.date : today(), type: e.type === "out" ? "out" : "in", category: String(e.category || "Lainnya"), amount: Math.max(0, numberValue(e.amount)), party: String(e.party || ""), reference: String(e.reference || ""), note: String(e.note || ""), source: String(e.source || "manual"), sourceId: e.source_id || null, createdAt: e.created_at || null }; });
-    if (Array.isArray(receivables)) db.receivables = receivables.filter(function(r) { return userDeletedReceivables.indexOf(r.id) === -1; }).map(function(r) { return { id: r.id, saleId: r.sale_id || null, billNo: String(r.bill_no || fallbackBillNo(r.date, r.sale_id || r.id)), date: validDate(r.date) ? r.date : today(), customer: String(r.customer || ""), dueDate: validDate(r.due_date) ? r.due_date : "", total: Math.max(0, numberValue(r.total)), note: String(r.note || ""), createdAt: r.created_at || null }; });
-    if (Array.isArray(receivablePayments)) db.receivablePayments = receivablePayments.filter(function(p) { return userDeletedPayments.indexOf(p.id) === -1; }).map(function(p) { return { id: p.id, receivableId: p.receivable_id, date: validDate(p.date) ? p.date : today(), amount: Math.max(0, numberValue(p.amount)), method: String(p.method || "cash"), note: String(p.note || ""), createdAt: p.created_at || null }; });
-    if (Array.isArray(changeReturns)) db.changeReturns = changeReturns.filter(function(r) { return userDeletedChangeReturns.indexOf(r.id) === -1; }).map(function(r) { return { id: r.id, saleId: r.sale_id, billNo: String(r.bill_no || fallbackBillNo(r.date, r.sale_id || r.id)), date: validDate(r.date) ? r.date : today(), recipient: String(r.recipient || ""), amount: Math.max(0, numberValue(r.amount)), note: String(r.note || ""), createdAt: r.created_at || null }; });
+    var remoteProducts = Array.isArray(products) ? products.filter(function(p) { return userDeletedProducts.indexOf(p.id) === -1; }).map(function(p) { return { id: p.id, name: String(p.name || ""), category: String(p.category || "Umum"), unit: String(p.unit || "pcs"), cost: numberValue(p.cost), price: numberValue(p.price), stock: integerValue(p.stock), minStock: integerValue(p.min_stock), active: p.active !== false, note: String(p.note || "") }; }) : [];
+    var remoteSales = Array.isArray(sales) ? sales.filter(function(s) { return userDeletedSales.indexOf(s.id) === -1; }).map(function(s) { var price = numberValue(s.price), qty = integerValue(s.qty), cost = numberValue(s.cost), discount = Math.min(price * qty, numberValue(s.discount)), netTotal = price * qty - discount; return { id: s.id, date: validDate(s.date) ? s.date : today(), billNo: String(s.bill_no || fallbackBillNo(s.date, s.id)), productId: s.product_id, product: String(s.product || ""), price: price, qty: qty, cost: cost, total: netTotal, discount: discount, profit: (price - cost) * qty - discount, paymentMethod: String(s.payment_method || "cash"), paidAmount: Math.max(0, Math.min(netTotal, numberValue(s.paid_amount, s.payment_method === "credit" ? 0 : netTotal))), tenderedAmount: Math.max(0, numberValue(s.tendered_amount, s.paid_amount)), changeAmount: Math.max(0, numberValue(s.change_amount)), changeRecipient: String(s.change_recipient || s.customer || ""), orderReceived: s.order_received === true, customer: String(s.customer || ""), dueDate: validDate(s.due_date) ? s.due_date : "", note: String(s.note || ""), receivableId: s.receivable_id || null, createdAt: s.created_at || null }; }) : [];
+    var remoteCashEntries = Array.isArray(cashEntries) ? cashEntries.filter(function(e) { return userDeletedCash.indexOf(e.id) === -1; }).map(function(e) { return { id: e.id, date: validDate(e.date) ? e.date : today(), type: e.type === "out" ? "out" : "in", category: String(e.category || "Lainnya"), amount: Math.max(0, numberValue(e.amount)), party: String(e.party || ""), reference: String(e.reference || ""), note: String(e.note || ""), source: String(e.source || "manual"), sourceId: e.source_id || null, createdAt: e.created_at || null }; }) : [];
+    var remoteReceivables = Array.isArray(receivables) ? receivables.filter(function(r) { return userDeletedReceivables.indexOf(r.id) === -1; }).map(function(r) { return { id: r.id, saleId: r.sale_id || null, billNo: String(r.bill_no || fallbackBillNo(r.date, r.sale_id || r.id)), date: validDate(r.date) ? r.date : today(), customer: String(r.customer || ""), dueDate: validDate(r.due_date) ? r.due_date : "", total: Math.max(0, numberValue(r.total)), note: String(r.note || ""), createdAt: r.created_at || null }; }) : [];
+    var remoteReceivablePayments = Array.isArray(receivablePayments) ? receivablePayments.filter(function(p) { return userDeletedPayments.indexOf(p.id) === -1; }).map(function(p) { return { id: p.id, receivableId: p.receivable_id, date: validDate(p.date) ? p.date : today(), amount: Math.max(0, numberValue(p.amount)), method: String(p.method || "cash"), note: String(p.note || ""), createdAt: p.created_at || null }; }) : [];
+    var remoteChangeReturns = Array.isArray(changeReturns) ? changeReturns.filter(function(r) { return userDeletedChangeReturns.indexOf(r.id) === -1; }).map(function(r) { return { id: r.id, saleId: r.sale_id, billNo: String(r.bill_no || fallbackBillNo(r.date, r.sale_id || r.id)), date: validDate(r.date) ? r.date : today(), recipient: String(r.recipient || ""), amount: Math.max(0, numberValue(r.amount)), note: String(r.note || ""), createdAt: r.created_at || null }; }) : [];
+    db.products = mergeRemoteRows(remoteProducts, db.products, userDeletedProducts);
+    db.sales = mergeRemoteRows(remoteSales, db.sales, userDeletedSales);
+    db.cashEntries = mergeRemoteRows(remoteCashEntries, db.cashEntries, userDeletedCash);
+    db.receivables = mergeRemoteRows(remoteReceivables, db.receivables, userDeletedReceivables);
+    db.receivablePayments = mergeRemoteRows(remoteReceivablePayments, db.receivablePayments, userDeletedPayments);
+    db.changeReturns = mergeRemoteRows(remoteChangeReturns, db.changeReturns, userDeletedChangeReturns);
     saveLocal();
+    if (syncWarnings.length) console.warn('Sync completed with optional table warnings:', syncWarnings);
     console.log('Data synced from Supabase');
-    return true;
+    return syncWarnings.length === 0;
   } catch (error) {
     console.error('Sync from Supabase error:', error);
     return false;
@@ -685,8 +718,9 @@ async function restoreSession() {
     sessionStorage.setItem("supabaseUser", JSON.stringify(user));
     await fetchUserRole(user.id);
     var synced = await syncFromSupabase();
+    var uploaded = synced ? await syncToSupabase() : false;
     showApp();
-    if (!synced) toast("Mode cloud belum tersinkron. Data lokal tetap tersedia.");
+    if (!synced || !uploaded) toast("Sinkronisasi cloud belum lengkap. Data lokal tetap dipertahankan.");
     renderAll();
     return true;
   }
@@ -859,8 +893,9 @@ async function handleEmailLogin() {
     await fetchUserRole(data.user.id);
 
     var synced = await syncFromSupabase();
+    var uploaded = synced ? await syncToSupabase() : false;
     showApp();
-    if (synced) {
+    if (synced && uploaded) {
       renderAll();
       toast(MSG.successSync);
     } else {
