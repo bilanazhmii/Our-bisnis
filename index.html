@@ -115,6 +115,10 @@
         <label>Jatuh tempo<input id="saleDueDate" type="date" disabled></label>
       </div>
       <div class="payment-rule"><span class="rule-icon">i</span><div><b>Aturan pembayaran</b><span>Jika uang diterima kurang dari total, transaksi tetap tersimpan dan selisihnya otomatis menjadi piutang atas nama debitur.</span></div></div>
+      <div id="qrisPaymentPanel" class="qris-payment-panel hidden">
+        <div><h4>Bayar dengan QRIS</h4><p>Scan QRIS menggunakan GoPay atau aplikasi pembayaran lain. Setelah pembayaran terlihat pada aplikasi merchant, masukkan nominal yang benar-benar diterima lalu simpan transaksi.</p><small>QRIS statis tidak mengirim konfirmasi otomatis ke aplikasi ini.</small></div>
+        <img src="qris-payment.png" alt="QRIS pembayaran El Matcha x el kopi">
+      </div>
     </div>
     <div class="form-section note-section">
       <h3>Catatan transaksi <small>Opsional</small></h3>

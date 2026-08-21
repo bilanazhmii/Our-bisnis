@@ -1146,27 +1146,39 @@ function syncSalePrice() {
   }
 }
 
+function calculateSalePayment(total, method, rawPaid) {
+  total = Math.max(0, numberValue(total));
+  method = method || "cash";
+  rawPaid = String(rawPaid == null ? "" : rawPaid).trim();
+  var tendered = rawPaid === "" ? (method === "credit" ? 0 : total) : Math.max(0, numberValue(rawPaid));
+  var paid = Math.min(total, tendered);
+  var balance = Math.max(0, total - paid);
+  var change = (method === "cash" || method === "credit") ? Math.max(0, tendered - total) : 0;
+  return { total: total, method: method, rawPaid: rawPaid, tendered: tendered, paid: paid, balance: balance, change: change, needsReceivable: balance > 0 };
+}
+
 function calcSaleTotal() {
   if (!$('saleTotal') || !$('salePrice') || !$('saleQty')) return;
   var total = Math.max(0, numberValue($('salePrice').value) * integerValue($('saleQty').value));
   var method = $('salePaymentMethod') ? $('salePaymentMethod').value : "cash";
-  var rawPaid = $('salePaid') ? $('salePaid').value.trim() : "";
-  var paid = rawPaid === "" ? (method === "credit" ? 0 : total) : Math.max(0, numberValue(rawPaid));
-  var applied = Math.min(total, paid), balance = Math.max(0, total - applied), change = method === "cash" ? Math.max(0, paid - total) : 0;
-  $('saleTotal').textContent = rupiah(total);
+  var rawPaid = $('salePaid') ? $('salePaid').value : "";
+  var payment = calculateSalePayment(total, method, rawPaid);
+  $('saleTotal').textContent = rupiah(payment.total);
   if ($('changeInfo')) {
     var message = "Lunas";
-    if (method === "credit" && balance > 0) message = "Akan menjadi piutang: " + rupiah(balance);
-    else if (balance > 0 && rawPaid !== "") message = "Uang kurang " + rupiah(balance) + " — otomatis menjadi piutang";
-    else if (method === "cash" && change > 0) message = "Kembalian: " + rupiah(change);
-    else if (rawPaid === "" && method !== "credit") message = "Uang diterima kosong = lunas; jika kurang, otomatis menjadi piutang";
+    if (payment.change > 0) message = "Kembalian: " + rupiah(payment.change);
+    else if (payment.balance > 0) message = "Uang kurang " + rupiah(payment.balance) + " — otomatis menjadi piutang";
+    else if (method === "credit") message = "Lunas — tidak ada piutang";
+    else if (payment.rawPaid === "") message = "Uang diterima kosong = lunas";
+    else if (method !== "cash" && payment.tendered > payment.total) message = "Pembayaran melebihi total; periksa nominal atau metode.";
     $('changeInfo').textContent = message;
-    $('changeInfo').className = "preview-status " + (balance > 0 ? "warning" : "positive");
+    $('changeInfo').className = "preview-status " + (payment.balance > 0 ? "warning" : (payment.change > 0 ? "positive" : ""));
   }
   if ($('salePaymentMethod')) {
-    var needsDebtDetails = method === "credit" || balance > 0;
+    var needsDebtDetails = method === "credit" || payment.balance > 0;
     if ($('saleCustomer')) $('saleCustomer').placeholder = needsDebtDetails ? "Wajib diisi jika kurang bayar" : "Opsional";
     if ($('saleDueDate')) $('saleDueDate').disabled = !needsDebtDetails;
+    if ($('qrisPaymentPanel')) $('qrisPaymentPanel').classList.toggle('hidden', method !== 'qris');
   }
 }
 
@@ -1176,17 +1188,19 @@ function addSale() {
   var price = numberValue($('salePrice').value), qty = integerValue($('saleQty').value), date = $('saleDate').value || today();
   var selectedMethod = $('salePaymentMethod') ? $('salePaymentMethod').value : "cash";
   var rawPaid = $('salePaid') ? $('salePaid').value.trim() : "";
-  var total = price * qty, paidInput = rawPaid === "" ? (selectedMethod === "credit" ? 0 : total) : numberValue(rawPaid), customer = $('saleCustomer') ? $('saleCustomer').value.trim() : "", dueDate = $('saleDueDate') ? $('saleDueDate').value : "", note = $('saleNote') ? $('saleNote').value.trim() : "";
+  var total = price * qty, customer = $('saleCustomer') ? $('saleCustomer').value.trim() : "", dueDate = $('saleDueDate') ? $('saleDueDate').value : "", note = $('saleNote') ? $('saleNote').value.trim() : "";
+  var payment = calculateSalePayment(total, selectedMethod, rawPaid), paidInput = payment.tendered;
   if (!p) return toast("Pilih menu.");
   if (!validDate(date)) return toast("Tanggal transaksi tidak valid.");
   if (price < 0 || paidInput < 0) return toast("Nominal tidak boleh negatif.");
   if (qty < 1) return toast("Jumlah minimal 1.");
   if (p.stock < qty) return toast("Stok tidak mencukupi.");
-  var paid = Math.min(total, paidInput), balance = Math.max(0, total - paid), method = selectedMethod === "credit" && balance <= 0 ? "cash" : selectedMethod;
-  var needsReceivable = balance > 0;
+  if (payment.tendered > payment.total && selectedMethod !== "cash" && selectedMethod !== "credit") return toast("Uang diterima melebihi total hanya dapat diberi kembalian pada metode tunai.");
+  var paid = payment.paid, balance = payment.balance, method = selectedMethod === "credit" && balance <= 0 ? "cash" : selectedMethod;
+  var needsReceivable = payment.needsReceivable;
   if (needsReceivable && !customer) return toast("Uang kurang. Nama debitur wajib diisi agar piutang tersimpan.");
   if (needsReceivable && dueDate && !validDate(dueDate)) return toast("Jatuh tempo tidak valid.");
-  var change = method === "cash" ? Math.max(0, paidInput - total) : 0, newId = uniqueId(), billNo = createBillNo(date), receivableId = null, createdAt = new Date().toISOString();
+  var change = (method === "cash" || method === "credit") ? Math.max(0, paidInput - total) : 0, newId = uniqueId(), billNo = createBillNo(date), receivableId = null, createdAt = new Date().toISOString();
   var sale = { id: newId, date: date, billNo: billNo, createdAt: createdAt, productId: p.id, product: p.name, price: price, qty: qty, cost: p.cost, total: total, discount: 0, profit: (price - p.cost) * qty, paymentMethod: method, paidAmount: paid, tenderedAmount: paidInput, changeAmount: change, customer: customer, dueDate: dueDate, note: note, receivableId: null };
   db.sales.push(sale);
   p.stock -= qty;
@@ -1370,7 +1384,8 @@ function printReceipt(id) {
   var s = db.sales.find(function(x) { return x.id === id; });
   if (!s) return;
   var receiptNo = s.billNo || fallbackBillNo(s.date, s.id), balance = saleBalance(s), time = s.createdAt ? esc(new Date(s.createdAt).toLocaleString("id-ID")) : esc(s.date);
-  $('printArea').innerHTML = '<article class="receipt"><header class="receipt-head"><div class="receipt-logo">✦</div><h1>' + esc(BRAND.name) + '</h1><p>' + esc(BRAND.tagline) + '</p></header><div class="receipt-meta"><span>No. ' + esc(receiptNo) + '</span><span>' + esc(time) + '</span></div><table class="receipt-items"><thead><tr><th>Item</th><th>Qty</th><th>Harga</th></tr></thead><tbody><tr><td>' + esc(s.product) + '</td><td>' + integerValue(s.qty) + '</td><td>' + rupiah(s.total) + '</td></tr></tbody></table><div class="receipt-total"><span>Total</span><strong>' + rupiah(s.total) + '</strong></div><p>Pembayaran: ' + esc(salePaymentDisplay(s)) + '</p><p>Dibayar: ' + rupiah(s.paidAmount || 0) + ' · Uang diterima: ' + rupiah(s.tenderedAmount == null ? (s.paidAmount || 0) : s.tenderedAmount) + ' · Kembalian: ' + rupiah(s.changeAmount || 0) + '</p>' + (balance > 0 ? '<p><b>Sisa piutang: ' + rupiah(balance) + '</b> · Jatuh tempo: ' + esc(s.dueDate || '-') + '</p>' : '') + (s.customer ? '<p>Pelanggan/Debitur: ' + esc(s.customer) + '</p>' : '') + (s.note ? '<p>Catatan: ' + esc(s.note) + '</p>' : '') + '<footer>Terima kasih sudah berkunjung.<br>Semoga harimu selalu hangat.</footer></article>';
+  var tendered = Math.max(0, numberValue(s.tenderedAmount, s.paidAmount)), paid = Math.max(0, numberValue(s.paidAmount)), change = Math.max(0, numberValue(s.changeAmount));
+  $('printArea').innerHTML = '<article class="receipt"><header class="receipt-head"><div class="receipt-logo">✦</div><h1>' + esc(BRAND.name) + '</h1><p>' + esc(BRAND.tagline) + '</p></header><div class="receipt-meta"><span>No. Bill<br><b>' + esc(receiptNo) + '</b></span><span>Tanggal<br><b>' + esc(time) + '</b></span></div><table class="receipt-items"><thead><tr><th>Item</th><th>Qty</th><th>Harga</th><th>Subtotal</th></tr></thead><tbody><tr><td>' + esc(s.product) + '</td><td>' + integerValue(s.qty) + '</td><td>' + rupiah(s.price) + '</td><td>' + rupiah(s.total) + '</td></tr></tbody></table><div class="receipt-total"><span>Total transaksi</span><strong>' + rupiah(s.total) + '</strong></div><div class="receipt-payment"><p><span>Metode pembayaran</span><b>' + esc(salePaymentDisplay(s)) + '</b></p><p><span>Uang diterima</span><b>' + rupiah(tendered) + '</b></p><p><span>Jumlah dibayar</span><b>' + rupiah(paid) + '</b></p><p><span>Kembalian</span><b>' + rupiah(change) + '</b></p>' + (balance > 0 ? '<p class="receipt-debt"><span>Sisa piutang</span><b>' + rupiah(balance) + '</b></p><p><span>Jatuh tempo</span><b>' + esc(s.dueDate || '-') + '</b></p>' : '') + '</div>' + (s.customer ? '<p>Pelanggan/Debitur: <b>' + esc(s.customer) + '</b></p>' : '') + (s.note ? '<p>Catatan: ' + esc(s.note) + '</p>' : '') + '<footer>Terima kasih sudah berkunjung.<br>Semoga harimu selalu hangat.</footer></article>';
   window.print();
 }
 
