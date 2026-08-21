@@ -148,10 +148,12 @@ async function initSupabase() {
     supabaseUrl = config.SUPABASE_URL.replace(/\/$/, "");
     supabaseKey = config.SUPABASE_ANON_KEY;
     useSupabase = true;
-    console.log("Supabase initialized");
+    console.log("Supabase initialized for project:", supabaseUrl);
+    setCloudStatus("loading", "Supabase terkonfigurasi; menunggu session akun.");
     return;
   }
   console.log("Supabase not configured, using local storage mode");
+  setCloudStatus("local", "Mode lokal aktif.");
 }
 
 function extractErrorPayload(source) {
@@ -669,6 +671,45 @@ function toast(t) {
   setTimeout(function() { $("toast").classList.remove("show"); }, 2200);
 }
 
+function cloudCountsText() {
+  return [
+    "menu " + (Array.isArray(db.products) ? db.products.length : 0),
+    "penjualan " + (Array.isArray(db.sales) ? db.sales.length : 0),
+    "kas " + (Array.isArray(db.cashEntries) ? db.cashEntries.length : 0),
+    "piutang " + (Array.isArray(db.receivables) ? db.receivables.length : 0),
+    "pembayaran piutang " + (Array.isArray(db.receivablePayments) ? db.receivablePayments.length : 0),
+    "kembalian " + (Array.isArray(db.changeReturns) ? db.changeReturns.length : 0)
+  ].join(" · ");
+}
+
+function setCloudStatus(state, message) {
+  var badge = $("cloudStatusBadge"), text = $("cloudStatusText"), identity = $("cloudIdentityText");
+  if (badge) {
+    badge.textContent = state === "success" ? "Tersambung" : state === "warning" ? "Perlu diperiksa" : state === "loading" ? "Memuat" : "Lokal";
+    badge.className = "cloud-status-badge " + state;
+  }
+  if (text) text.textContent = (message || "") + " " + cloudCountsText();
+  if (identity) identity.textContent = currentUser && currentUser.id ? "Akun: " + (currentUser.email || "tanpa email") + " · ID: " + currentUser.id + " · Project: " + (supabaseUrl || "belum terkonfigurasi") : (useSupabase ? "Belum ada session Supabase aktif." : "Mode lokal aktif; data belum dikirim ke Supabase.");
+}
+
+async function manualSync() {
+  if (!useSupabase || !currentUser || !currentUser.id) {
+    setCloudStatus("warning", "Supabase belum tersambung atau akun belum login.");
+    return;
+  }
+  setCloudStatus("loading", "Sedang mengambil dan menggabungkan data cloud...");
+  var downloaded = await syncFromSupabase();
+  var uploaded = downloaded ? await syncToSupabase() : false;
+  renderAll();
+  if (downloaded && uploaded) {
+    setCloudStatus("success", "Sinkronisasi selesai tanpa menghapus data lokal.");
+    toast("Data cloud berhasil disegarkan dan disimpan.");
+  } else {
+    setCloudStatus("warning", "Sinkronisasi belum lengkap. Data lokal tetap dipertahankan.");
+    toast("Sinkronisasi belum lengkap. Periksa konfigurasi dan policy Supabase.");
+  }
+}
+
 function showLoginMessage(message, isSuccess) {
   if (!$("loginMsg")) return;
   $("loginMsg").textContent = message;
@@ -720,7 +761,12 @@ async function restoreSession() {
     var synced = await syncFromSupabase();
     var uploaded = synced ? await syncToSupabase() : false;
     showApp();
-    if (!synced || !uploaded) toast("Sinkronisasi cloud belum lengkap. Data lokal tetap dipertahankan.");
+    if (!synced || !uploaded) {
+      setCloudStatus("warning", "Sinkronisasi cloud belum lengkap. Data lokal tetap dipertahankan.");
+      toast("Sinkronisasi cloud belum lengkap. Data lokal tetap dipertahankan.");
+    } else {
+      setCloudStatus("success", "Data cloud berhasil dimuat dan disimpan.");
+    }
     renderAll();
     return true;
   }
@@ -793,6 +839,7 @@ function boot() {
   // Settings handlers
   if ($("changePinBtn")) $("changePinBtn").onclick = changePin;
   if ($("clearBtn")) $("clearBtn").onclick = clearData;
+  if ($("cloudSyncBtn")) $("cloudSyncBtn").onclick = manualSync;
   if ($("dashDate")) $("dashDate").onchange = renderDashboard;
 
   // Login tabs
@@ -896,9 +943,11 @@ async function handleEmailLogin() {
     var uploaded = synced ? await syncToSupabase() : false;
     showApp();
     if (synced && uploaded) {
+      setCloudStatus("success", "Data cloud berhasil dimuat dan disimpan.");
       renderAll();
       toast(MSG.successSync);
     } else {
+      setCloudStatus("warning", "Data lokal tetap dipertahankan karena sinkronisasi belum lengkap.");
       toast(MSG.successSyncPartial);
     }
   } catch (error) {

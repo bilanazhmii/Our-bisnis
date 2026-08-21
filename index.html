@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="logo-matcha.png" type="image/png">
 <title>El Matcha × el kopi</title>
-<link rel="stylesheet" href="style.css?v=ui2">
+<link rel="stylesheet" href="style.css?v=cloud3">
 </head>
 <body>
 <div id="loginScreen" class="login-screen">
@@ -230,6 +230,7 @@
       <button id="changePinBtn" type="button" class="primary">Simpan PIN</button><div id="pinMsg" class="msg"></div>
     </form>
   </div>
+  <div class="card cloud-status-card"><div class="card-heading"><div><h2>Status Cloud</h2><p class="card-subtitle">Periksa akun aktif dan jalankan sinkronisasi tanpa menghapus data.</p></div><span id="cloudStatusBadge" class="cloud-status-badge">Belum diperiksa</span></div><p id="cloudStatusText" class="cloud-status-text">Belum ada pemeriksaan koneksi.</p><small id="cloudIdentityText" class="cloud-identity-text">Akun aktif belum tersedia.</small><div class="form-actions"><button id="cloudSyncBtn" type="button" class="secondary">Sinkronkan Sekarang</button></div></div>
   <div class="card"><h2>Data</h2><button id="clearBtn" class="danger-btn">Hapus Semua Data</button></div>
 </section>
 
@@ -254,6 +255,6 @@
 
 <div id="toast" class="toast"></div>
 <div id="printArea"></div>
-<script src="script.js?v=ui2"></script>
+<script src="script.js?v=cloud3"></script>
 </body>
 </html>
