@@ -513,7 +513,8 @@ NOTIFY pgrst, 'reload schema';
 -- ORDER DELIVERY STATUS (IDEMPOTENT)
 -- Indicates whether the customer has received the order.
 -- Existing sales default to not yet received.
-ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS order_received BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS order_received BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS change_returned_confirmed BOOLEAN DEFAULT FALSE;
 
 -- CHANGE RETURN LEDGER (IDEMPOTENT)
 -- Tracks change that is still owed or returned in parts.

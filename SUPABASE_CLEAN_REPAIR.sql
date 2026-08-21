@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS public.sales (
   change_amount NUMERIC DEFAULT 0,
   change_recipient TEXT DEFAULT '',
   order_received BOOLEAN DEFAULT FALSE,
+  change_returned_confirmed BOOLEAN DEFAULT FALSE,
   customer TEXT DEFAULT '',
   due_date TEXT,
   note TEXT DEFAULT '',
@@ -164,6 +165,7 @@ ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS tendered_amount NUMERIC DEFAUL
 ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS change_amount NUMERIC DEFAULT 0;
 ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS change_recipient TEXT DEFAULT '';
 ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS order_received BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS change_returned_confirmed BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS customer TEXT DEFAULT '';
 ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS due_date TEXT;
 ALTER TABLE public.sales ADD COLUMN IF NOT EXISTS note TEXT DEFAULT '';
@@ -234,6 +236,7 @@ UPDATE public.sales SET tendered_amount = paid_amount WHERE tendered_amount IS N
 UPDATE public.sales SET change_amount = 0 WHERE change_amount IS NULL;
 UPDATE public.sales SET change_recipient = COALESCE(customer, '') WHERE change_recipient IS NULL;
 UPDATE public.sales SET order_received = FALSE WHERE order_received IS NULL;
+UPDATE public.sales SET change_returned_confirmed = FALSE WHERE change_returned_confirmed IS NULL;
 UPDATE public.sales SET customer = '' WHERE customer IS NULL;
 UPDATE public.sales SET note = '' WHERE note IS NULL;
 
