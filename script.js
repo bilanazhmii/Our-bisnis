@@ -1,6 +1,8 @@
 const $ = function(id) { return document.getElementById(id); };
 const KEY = "kopiTutugDataV2";
 const BRAND = { name: "El Matcha × el kopi", tagline: "Matcha, kopi, dan cerita baik" };
+const SHARED_WORKSPACE = true;
+const CLOUD_OWNER_ID = "64c65e90-35eb-4bff-b3ad-76aad739d737";
 const PENDING_DELETES_KEY = KEY + "PendingDeletes";
 const today = function() {
   var d = new Date();
@@ -411,7 +413,7 @@ db.changeReturns = db.changeReturns.filter(function(r) { return r && r.id && r.s
 function prepareUserData(userId) {
   var previous = null;
   try { previous = JSON.parse(sessionStorage.getItem("supabaseUser") || "null"); } catch (error) { previous = null; }
-  if (previous && previous.id && previous.id !== userId) {
+  if (!SHARED_WORKSPACE && previous && previous.id && previous.id !== userId) {
     db = { pin: "1234", products: [], sales: [], cashEntries: [], receivables: [], receivablePayments: [], changeReturns: [] };
     saveLocal();
   }
@@ -430,7 +432,18 @@ function savePendingDeletes() {
   localStorage.setItem(PENDING_DELETES_KEY, JSON.stringify(pendingDeletes));
 }
 
+function pendingDeleteItems(table, userId) {
+  return (Array.isArray(pendingDeletes[table]) ? pendingDeletes[table] : []).filter(function(item) {
+    return SHARED_WORKSPACE || item.userId === userId;
+  });
+}
+
+function cloudOwnerId() {
+  return SHARED_WORKSPACE ? CLOUD_OWNER_ID : (currentUser && currentUser.id ? currentUser.id : null);
+}
+
 function queueRemoteDelete(table, id) {
+
   if (!id) return;
   var list = pendingDeletes[table];
   if (!Array.isArray(list)) return;
@@ -448,17 +461,19 @@ async function syncToSupabase() {
   if (!currentUser || !currentUser.id) return false;
 
   try {
-    var userId = currentUser.id;
+        var userId = cloudOwnerId();
+    if (!userId) return false;
     var tables = ["products", "sales", "cashEntries", "receivables", "receivablePayments", "changeReturns"];
+
     var remoteTables = { cashEntries: "cash_entries", receivables: "receivables", receivablePayments: "receivable_payments", changeReturns: "change_returns" };
     var deletedIds = {};
     for (var di = 0; di < tables.length; di++) {
       var localTable = tables[di];
-      deletedIds[localTable] = pendingDeletes[localTable].filter(function(item) { return item.userId === userId; }).map(function(item) { return item.id; });
-      var deleteItems = pendingDeletes[localTable].filter(function(item) { return item.userId === userId; });
+      var deleteItems = pendingDeleteItems(localTable, userId);
+      deletedIds[localTable] = deleteItems.map(function(item) { return item.id; });
       var remoteTable = remoteTables[localTable] || localTable;
       await Promise.all(deleteItems.map(function(item) { return supabaseDelete(remoteTable, item.id, accessToken); }));
-      pendingDeletes[localTable] = pendingDeletes[localTable].filter(function(item) { return item.userId !== userId; });
+      pendingDeletes[localTable] = pendingDeletes[localTable].filter(function(item) { return deleteItems.indexOf(item) === -1; });
     }
     savePendingDeletes();
     var activeProducts = db.products.filter(function(p) { return deletedIds.products.indexOf(p.id) === -1; });
@@ -516,7 +531,7 @@ async function syncFromSupabase() {
   try {
     await fetchUserRole(currentUser.id);
 
-    var userFilter = 'user_id=eq.' + encodeURIComponent(currentUser.id), syncWarnings = [];
+    var userFilter = SHARED_WORKSPACE ? "" : 'user_id=eq.' + encodeURIComponent(currentUser.id), syncWarnings = [];
     var products = await supabaseSelect('products', accessToken, userFilter);
     var sales = await supabaseSelect('sales', accessToken, userFilter);
     async function selectOptionalTable(table) {
@@ -533,12 +548,12 @@ async function syncFromSupabase() {
     var receivablePayments = await selectOptionalTable('receivable_payments');
     var changeReturns = await selectOptionalTable('change_returns');
 
-    var userDeletedProducts = pendingDeletes.products.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
-    var userDeletedSales = pendingDeletes.sales.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
-    var userDeletedCash = pendingDeletes.cashEntries.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
-    var userDeletedReceivables = pendingDeletes.receivables.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
-    var userDeletedPayments = pendingDeletes.receivablePayments.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
-    var userDeletedChangeReturns = pendingDeletes.changeReturns.filter(function(item) { return item.userId === currentUser.id; }).map(function(item) { return item.id; });
+    var userDeletedProducts = pendingDeleteItems("products", currentUser.id).map(function(item) { return item.id; });
+    var userDeletedSales = pendingDeleteItems("sales", currentUser.id).map(function(item) { return item.id; });
+    var userDeletedCash = pendingDeleteItems("cashEntries", currentUser.id).map(function(item) { return item.id; });
+    var userDeletedReceivables = pendingDeleteItems("receivables", currentUser.id).map(function(item) { return item.id; });
+    var userDeletedPayments = pendingDeleteItems("receivablePayments", currentUser.id).map(function(item) { return item.id; });
+    var userDeletedChangeReturns = pendingDeleteItems("changeReturns", currentUser.id).map(function(item) { return item.id; });
     var remoteProducts = Array.isArray(products) ? products.filter(function(p) { return userDeletedProducts.indexOf(p.id) === -1; }).map(function(p) { return { id: p.id, name: String(p.name || ""), category: String(p.category || "Umum"), unit: String(p.unit || "pcs"), cost: numberValue(p.cost), price: numberValue(p.price), stock: integerValue(p.stock), minStock: integerValue(p.min_stock), active: p.active !== false, note: String(p.note || "") }; }) : [];
     var remoteSales = Array.isArray(sales) ? sales.filter(function(s) { return userDeletedSales.indexOf(s.id) === -1; }).map(function(s) { var price = numberValue(s.price), qty = integerValue(s.qty), cost = numberValue(s.cost), discount = Math.min(price * qty, numberValue(s.discount)), netTotal = price * qty - discount; return { id: s.id, date: validDate(s.date) ? s.date : today(), billNo: String(s.bill_no || fallbackBillNo(s.date, s.id)), productId: s.product_id, product: String(s.product || ""), price: price, qty: qty, cost: cost, total: netTotal, discount: discount, profit: (price - cost) * qty - discount, paymentMethod: String(s.payment_method || "cash"), paidAmount: Math.max(0, Math.min(netTotal, numberValue(s.paid_amount, s.payment_method === "credit" ? 0 : netTotal))), tenderedAmount: Math.max(0, numberValue(s.tendered_amount, s.paid_amount)), changeAmount: Math.max(0, numberValue(s.change_amount)), changeRecipient: String(s.change_recipient || s.customer || ""), orderReceived: s.order_received === true, customer: String(s.customer || ""), dueDate: validDate(s.due_date) ? s.due_date : "", note: String(s.note || ""), receivableId: s.receivable_id || null, createdAt: s.created_at || null }; }) : [];
     var remoteCashEntries = Array.isArray(cashEntries) ? cashEntries.filter(function(e) { return userDeletedCash.indexOf(e.id) === -1; }).map(function(e) { return { id: e.id, date: validDate(e.date) ? e.date : today(), type: e.type === "out" ? "out" : "in", category: String(e.category || "Lainnya"), amount: Math.max(0, numberValue(e.amount)), party: String(e.party || ""), reference: String(e.reference || ""), note: String(e.note || ""), source: String(e.source || "manual"), sourceId: e.source_id || null, createdAt: e.created_at || null }; }) : [];
@@ -689,7 +704,7 @@ function setCloudStatus(state, message) {
     badge.className = "cloud-status-badge " + state;
   }
   if (text) text.textContent = (message || "") + " " + cloudCountsText();
-  if (identity) identity.textContent = currentUser && currentUser.id ? "Akun: " + (currentUser.email || "tanpa email") + " · ID: " + currentUser.id + " · Project: " + (supabaseUrl || "belum terkonfigurasi") : (useSupabase ? "Belum ada session Supabase aktif." : "Mode lokal aktif; data belum dikirim ke Supabase.");
+  if (identity) identity.textContent = currentUser && currentUser.id ? "Workspace bersama · Akun aktif: " + (currentUser.email || "tanpa email") + " · ID: " + currentUser.id + " · Pemilik data: " + (cloudOwnerId() || "belum ditentukan") + " · Project: " + (supabaseUrl || "belum terkonfigurasi") : (useSupabase ? "Belum ada session Supabase aktif." : "Mode lokal aktif; data belum dikirim ke Supabase.");
 }
 
 async function manualSync() {
