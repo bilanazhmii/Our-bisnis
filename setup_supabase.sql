@@ -554,12 +554,88 @@ END $$;
 ALTER TABLE public.change_returns ENABLE ROW LEVEL SECURITY;
 CREATE INDEX IF NOT EXISTS change_returns_user_sale_idx ON public.change_returns (user_id, sale_id);
 CREATE INDEX IF NOT EXISTS change_returns_user_date_idx ON public.change_returns (user_id, date DESC);
+-- ============================================
+-- SHARED WORKSPACE FINAL POLICIES
+-- Rerunning this file must not restore per-user isolation.
+-- All authenticated POS accounts share the same business dataset.
+-- ============================================
+DROP POLICY IF EXISTS "Users can view own products" ON public.products;
+DROP POLICY IF EXISTS "Users can insert own products" ON public.products;
+DROP POLICY IF EXISTS "Users can update own products" ON public.products;
+DROP POLICY IF EXISTS "Users can delete own products" ON public.products;
+DROP POLICY IF EXISTS "Users can view own sales" ON public.sales;
+DROP POLICY IF EXISTS "Users can insert own sales" ON public.sales;
+DROP POLICY IF EXISTS "Users can update own sales" ON public.sales;
+DROP POLICY IF EXISTS "Users can delete own sales" ON public.sales;
+DROP POLICY IF EXISTS "Users can view own cash entries" ON public.cash_entries;
+DROP POLICY IF EXISTS "Users can insert own cash entries" ON public.cash_entries;
+DROP POLICY IF EXISTS "Users can update own cash entries" ON public.cash_entries;
+DROP POLICY IF EXISTS "Users can delete own cash entries" ON public.cash_entries;
+DROP POLICY IF EXISTS "Users can view own receivables" ON public.receivables;
+DROP POLICY IF EXISTS "Users can insert own receivables" ON public.receivables;
+DROP POLICY IF EXISTS "Users can update own receivables" ON public.receivables;
+DROP POLICY IF EXISTS "Users can delete own receivables" ON public.receivables;
+DROP POLICY IF EXISTS "Users can view own receivable payments" ON public.receivable_payments;
+DROP POLICY IF EXISTS "Users can insert own receivable payments" ON public.receivable_payments;
+DROP POLICY IF EXISTS "Users can update own receivable payments" ON public.receivable_payments;
+DROP POLICY IF EXISTS "Users can delete own receivable payments" ON public.receivable_payments;
 DROP POLICY IF EXISTS "Users can view own change returns" ON public.change_returns;
 DROP POLICY IF EXISTS "Users can insert own change returns" ON public.change_returns;
 DROP POLICY IF EXISTS "Users can update own change returns" ON public.change_returns;
 DROP POLICY IF EXISTS "Users can delete own change returns" ON public.change_returns;
-CREATE POLICY "Users can view own change returns" ON public.change_returns FOR SELECT USING (auth.uid() = user_id OR public.is_admin());
-CREATE POLICY "Users can insert own change returns" ON public.change_returns FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own change returns" ON public.change_returns FOR UPDATE USING (auth.uid() = user_id OR public.is_admin()) WITH CHECK (auth.uid() = user_id OR public.is_admin());
-CREATE POLICY "Users can delete own change returns" ON public.change_returns FOR DELETE USING (auth.uid() = user_id OR public.is_admin());
+
+DROP POLICY IF EXISTS "POS shared products select" ON public.products;
+DROP POLICY IF EXISTS "POS shared products insert" ON public.products;
+DROP POLICY IF EXISTS "POS shared products update" ON public.products;
+DROP POLICY IF EXISTS "POS shared products delete" ON public.products;
+CREATE POLICY "POS shared products select" ON public.products FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared products insert" ON public.products FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared products update" ON public.products FOR UPDATE USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared products delete" ON public.products FOR DELETE USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "POS shared sales select" ON public.sales;
+DROP POLICY IF EXISTS "POS shared sales insert" ON public.sales;
+DROP POLICY IF EXISTS "POS shared sales update" ON public.sales;
+DROP POLICY IF EXISTS "POS shared sales delete" ON public.sales;
+CREATE POLICY "POS shared sales select" ON public.sales FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared sales insert" ON public.sales FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared sales update" ON public.sales FOR UPDATE USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared sales delete" ON public.sales FOR DELETE USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "POS shared cash select" ON public.cash_entries;
+DROP POLICY IF EXISTS "POS shared cash insert" ON public.cash_entries;
+DROP POLICY IF EXISTS "POS shared cash update" ON public.cash_entries;
+DROP POLICY IF EXISTS "POS shared cash delete" ON public.cash_entries;
+CREATE POLICY "POS shared cash select" ON public.cash_entries FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared cash insert" ON public.cash_entries FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared cash update" ON public.cash_entries FOR UPDATE USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared cash delete" ON public.cash_entries FOR DELETE USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "POS shared receivables select" ON public.receivables;
+DROP POLICY IF EXISTS "POS shared receivables insert" ON public.receivables;
+DROP POLICY IF EXISTS "POS shared receivables update" ON public.receivables;
+DROP POLICY IF EXISTS "POS shared receivables delete" ON public.receivables;
+CREATE POLICY "POS shared receivables select" ON public.receivables FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared receivables insert" ON public.receivables FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared receivables update" ON public.receivables FOR UPDATE USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared receivables delete" ON public.receivables FOR DELETE USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "POS shared payments select" ON public.receivable_payments;
+DROP POLICY IF EXISTS "POS shared payments insert" ON public.receivable_payments;
+DROP POLICY IF EXISTS "POS shared payments update" ON public.receivable_payments;
+DROP POLICY IF EXISTS "POS shared payments delete" ON public.receivable_payments;
+CREATE POLICY "POS shared payments select" ON public.receivable_payments FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared payments insert" ON public.receivable_payments FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared payments update" ON public.receivable_payments FOR UPDATE USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared payments delete" ON public.receivable_payments FOR DELETE USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "POS shared change select" ON public.change_returns;
+DROP POLICY IF EXISTS "POS shared change insert" ON public.change_returns;
+DROP POLICY IF EXISTS "POS shared change update" ON public.change_returns;
+DROP POLICY IF EXISTS "POS shared change delete" ON public.change_returns;
+CREATE POLICY "POS shared change select" ON public.change_returns FOR SELECT USING (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared change insert" ON public.change_returns FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared change update" ON public.change_returns FOR UPDATE USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL);
+CREATE POLICY "POS shared change delete" ON public.change_returns FOR DELETE USING (auth.uid() IS NOT NULL);
+
 NOTIFY pgrst, 'reload schema';

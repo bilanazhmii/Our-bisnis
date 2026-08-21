@@ -57,6 +57,7 @@ var supabaseUrl = "";
 var supabaseKey = "";
 var useSupabase = false;
 var currentUser = null;
+var lastCloudCounts = null;
 var userRole = "user";
 var cachedUsers = [];
 var registerInProgress = false;
@@ -548,6 +549,7 @@ async function syncFromSupabase() {
     var receivables = await selectOptionalTable('receivables');
     var receivablePayments = await selectOptionalTable('receivable_payments');
     var changeReturns = await selectOptionalTable('change_returns');
+    lastCloudCounts = { products: Array.isArray(products) ? products.length : 0, sales: Array.isArray(sales) ? sales.length : 0, cashEntries: Array.isArray(cashEntries) ? cashEntries.length : 0, receivables: Array.isArray(receivables) ? receivables.length : 0, receivablePayments: Array.isArray(receivablePayments) ? receivablePayments.length : 0, changeReturns: Array.isArray(changeReturns) ? changeReturns.length : 0 };
 
     var userDeletedProducts = pendingDeleteItems("products", currentUser.id).map(function(item) { return item.id; });
     var userDeletedSales = pendingDeleteItems("sales", currentUser.id).map(function(item) { return item.id; });
@@ -569,8 +571,8 @@ async function syncFromSupabase() {
     db.changeReturns = mergeRemoteRows(remoteChangeReturns, db.changeReturns, userDeletedChangeReturns);
     saveLocal();
     if (syncWarnings.length) console.warn('Sync completed with optional table warnings:', syncWarnings);
-    console.log('Data synced from Supabase');
-    return syncWarnings.length === 0;
+    console.log('Data synced from Supabase', { optionalTableWarnings: syncWarnings, counts: cloudCountsText() });
+    return true;
   } catch (error) {
     console.error('Sync from Supabase error:', error);
     return false;
@@ -688,14 +690,16 @@ function toast(t) {
 }
 
 function cloudCountsText() {
-  return [
-    "menu " + (Array.isArray(db.products) ? db.products.length : 0),
+  var localText = [
+    "lokal menu " + (Array.isArray(db.products) ? db.products.length : 0),
     "penjualan " + (Array.isArray(db.sales) ? db.sales.length : 0),
     "kas " + (Array.isArray(db.cashEntries) ? db.cashEntries.length : 0),
     "piutang " + (Array.isArray(db.receivables) ? db.receivables.length : 0),
     "pembayaran piutang " + (Array.isArray(db.receivablePayments) ? db.receivablePayments.length : 0),
     "kembalian " + (Array.isArray(db.changeReturns) ? db.changeReturns.length : 0)
   ].join(" · ");
+  if (!lastCloudCounts) return localText;
+  return localText + " · cloud menu " + lastCloudCounts.products + " · cloud penjualan " + lastCloudCounts.sales + " · cloud kas " + lastCloudCounts.cashEntries + " · cloud piutang " + lastCloudCounts.receivables + " · cloud kembalian " + lastCloudCounts.changeReturns;
 }
 
 function setCloudStatus(state, message) {
