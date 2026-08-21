@@ -370,3 +370,11 @@ body{background:radial-gradient(circle at 8% 0%,rgba(193,207,166,.24),transparen
 @keyframes logoFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
 @media(max-width:700px){.pending-changes-card .compact-stats{grid-template-columns:1fr}.pending-changes-card .toolbar{align-items:stretch}.pending-changes-card .toolbar input{width:100%}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+
+/* Order delivery status */
+.delivery-check{display:inline-flex;align-items:center;gap:8px;min-width:145px;cursor:pointer;font-size:12px;font-weight:700;line-height:1.25}
+.delivery-check input{width:18px;height:18px;accent-color:var(--matcha);flex:0 0 auto}
+.delivery-status{display:inline-flex;align-items:center;white-space:nowrap;padding:5px 9px;border-radius:999px;background:var(--matcha-soft);color:var(--matcha-ink)}
+.delivery-status.warning{background:#fff4df;color:#9a5b00}
+.delivery-status.positive{background:#e4f4e5;color:#26723a}
+@media(max-width:900px){.delivery-check{min-width:130px}.sales-history-card .table-wrap{overflow-x:auto}.sales-history-card table{min-width:980px}}
