@@ -725,6 +725,65 @@ async function manualSync() {
   }
 }
 
+function localRecoveryCounts() {
+  var currentDate = today();
+  return {
+    products: Array.isArray(db.products) ? db.products.length : 0,
+    sales: Array.isArray(db.sales) ? db.sales.length : 0,
+    todaySales: Array.isArray(db.sales) ? db.sales.filter(function(s) { return s.date === currentDate; }).length : 0,
+    cashEntries: Array.isArray(db.cashEntries) ? db.cashEntries.length : 0,
+    receivables: Array.isArray(db.receivables) ? db.receivables.length : 0,
+    receivablePayments: Array.isArray(db.receivablePayments) ? db.receivablePayments.length : 0,
+    changeReturns: Array.isArray(db.changeReturns) ? db.changeReturns.length : 0
+  };
+}
+
+function updateLocalRecoverySummary() {
+  var el = $("localRecoverySummary");
+  if (!el) return;
+  var c = localRecoveryCounts();
+  el.textContent = "LocalStorage: " + c.products + " menu · " + c.sales + " penjualan · " + c.todaySales + " transaksi hari ini · " + c.cashEntries + " kas · " + c.receivables + " piutang";
+}
+
+async function recoverLocalToCloud() {
+  if (!useSupabase || !currentUser || !currentUser.id) {
+    setCloudStatus("warning", "Login Supabase diperlukan sebelum pemulihan.");
+    toast("Login Supabase diperlukan untuk memulihkan data lokal.");
+    return;
+  }
+  var c = localRecoveryCounts();
+  if (!c.products && !c.sales && !c.cashEntries && !c.receivables && !c.receivablePayments && !c.changeReturns) {
+    toast("Tidak ada data lokal yang bisa dipulihkan pada browser ini.");
+    return;
+  }
+  var message = "Pulihkan " + c.sales + " penjualan lokal (" + c.todaySales + " hari ini) ke workspace bersama? Data cloud tidak dihapus. Data dengan ID sama akan diperbarui dari salinan lokal setelah backup browser dibuat.";
+  if (!confirm(message)) return;
+  var backupKey = KEY + "RecoveryBackup:" + new Date().toISOString();
+  try {
+    localStorage.setItem(backupKey, JSON.stringify({ version: 1, createdAt: new Date().toISOString(), db: db }));
+  } catch (error) {
+    toast("Backup lokal gagal dibuat. Pemulihan dibatalkan agar aman.");
+    return;
+  }
+  setCloudStatus("loading", "Mencadangkan dan mengirim data lokal ke workspace bersama...");
+  var uploaded = await syncToSupabase();
+  if (!uploaded) {
+    setCloudStatus("warning", "Upload data lokal gagal. Backup lokal tetap tersimpan dan data tidak dihapus.");
+    toast("Pemulihan gagal di-upload. Backup lokal tersimpan.");
+    return;
+  }
+  var downloaded = await syncFromSupabase();
+  var verified = downloaded ? await syncToSupabase() : false;
+  renderAll();
+  if (downloaded && verified) {
+    setCloudStatus("success", "Data lokal berhasil dipulihkan, digabung, dan diverifikasi di cloud.");
+    toast("Data lokal berhasil disinkronkan ke cloud.");
+  } else {
+    setCloudStatus("warning", "Data lokal sudah dicadangkan, tetapi verifikasi cloud belum lengkap.");
+    toast("Backup lokal aman; verifikasi cloud belum lengkap.");
+  }
+}
+
 function showLoginMessage(message, isSuccess) {
   if (!$("loginMsg")) return;
   $("loginMsg").textContent = message;
@@ -855,6 +914,7 @@ function boot() {
   if ($("changePinBtn")) $("changePinBtn").onclick = changePin;
   if ($("clearBtn")) $("clearBtn").onclick = clearData;
   if ($("cloudSyncBtn")) $("cloudSyncBtn").onclick = manualSync;
+  if ($("localRecoveryBtn")) $("localRecoveryBtn").onclick = recoverLocalToCloud;
   if ($("dashDate")) $("dashDate").onchange = renderDashboard;
 
   // Login tabs
@@ -1196,7 +1256,7 @@ function cashSummary(from, to) {
   return { entries: entries, cashIn: cashIn, cashOut: cashOut, net: cashIn - cashOut };
 }
 function outstandingReceivables(asOf) { return db.receivables.filter(function(r) { return (!asOf || r.date <= asOf) && getReceivableBalance(r) > 0; }); }
-function renderAll() { renderProducts(); fillProductSelect(); renderSales(); renderPendingChanges(); renderCash(); renderReceivables(); renderDashboard(); renderReport(); }
+function renderAll() { renderProducts(); fillProductSelect(); renderSales(); renderPendingChanges(); renderCash(); renderReceivables(); renderDashboard(); renderReport(); updateLocalRecoverySummary(); }
 
 function addProduct() {
   if (!$('pName') || !$('pCost') || !$('pPrice') || !$('pStock')) return;
